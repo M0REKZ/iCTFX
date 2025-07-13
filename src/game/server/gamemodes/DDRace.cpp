@@ -9,6 +9,7 @@
 #include <game/server/gamecontext.h>
 #include <game/server/player.h>
 #include <engine/server.h>
+#include <game/server/score.h>
 #include <game/version.h>
 #include <game/server/entities/flag.h>
 
@@ -90,8 +91,8 @@ void CGameControllerDDRace::HandleCharacterTiles(CCharacter *pChr, int MapIndex)
 	CPlayer *pPlayer = pChr->GetPlayer();
 	const int ClientID = pPlayer->GetCID();
 
-	int m_TileIndex = GameServer()->Collision()->GetTileIndex(MapIndex);
-	int m_TileFIndex = GameServer()->Collision()->GetFTileIndex(MapIndex);
+	int TileIndex = GameServer()->Collision()->GetTileIndex(MapIndex);
+	int TileFIndex = GameServer()->Collision()->GetFrontTileIndex(MapIndex);
 
 	//Sensitivity
 	int S1 = GameServer()->Collision()->GetPureMapIndex(vec2(pChr->GetPos().x + pChr->GetProximityRadius() / 3.f, pChr->GetPos().y - pChr->GetProximityRadius() / 3.f));
@@ -102,10 +103,10 @@ void CGameControllerDDRace::HandleCharacterTiles(CCharacter *pChr, int MapIndex)
 	int Tile2 = GameServer()->Collision()->GetTileIndex(S2);
 	int Tile3 = GameServer()->Collision()->GetTileIndex(S3);
 	int Tile4 = GameServer()->Collision()->GetTileIndex(S4);
-	int FTile1 = GameServer()->Collision()->GetFTileIndex(S1);
-	int FTile2 = GameServer()->Collision()->GetFTileIndex(S2);
-	int FTile3 = GameServer()->Collision()->GetFTileIndex(S3);
-	int FTile4 = GameServer()->Collision()->GetFTileIndex(S4);
+	int FTile1 = GameServer()->Collision()->GetFrontTileIndex(S1);
+	int FTile2 = GameServer()->Collision()->GetFrontTileIndex(S2);
+	int FTile3 = GameServer()->Collision()->GetFrontTileIndex(S3);
+	int FTile4 = GameServer()->Collision()->GetFrontTileIndex(S4);
 
 	// const int PlayerDDRaceState = pChr->m_DDRaceState;
 	// bool IsOnStartTile = (m_TileIndex == TILE_START) || (m_TileFIndex == TILE_START) || FTile1 == TILE_START || FTile2 == TILE_START || FTile3 == TILE_START || FTile4 == TILE_START || Tile1 == TILE_START || Tile2 == TILE_START || Tile3 == TILE_START || Tile4 == TILE_START;
@@ -152,19 +153,19 @@ void CGameControllerDDRace::HandleCharacterTiles(CCharacter *pChr, int MapIndex)
 	// unlock team
 	if(((m_TileIndex == TILE_UNLOCK_TEAM) || (m_TileFIndex == TILE_UNLOCK_TEAM)) && m_Teams.TeamLocked(GetPlayerTeam(ClientID)))
 	{
-		m_Teams.SetTeamLock(GetPlayerTeam(ClientID), false);
-		GameServer()->SendChatTeam(GetPlayerTeam(ClientID), "Your team was unlocked by an unlock team tile");
+		Teams().SetTeamLock(GameServer()->GetDDRaceTeam(ClientId), false);
+		GameServer()->SendChatTeam(GameServer()->GetDDRaceTeam(ClientId), "Your team was unlocked by an unlock team tile");
 	}
 
 	// solo part
-	if(((m_TileIndex == TILE_SOLO_ENABLE) || (m_TileFIndex == TILE_SOLO_ENABLE)) && !m_Teams.m_Core.GetSolo(ClientID))
+	if(((TileIndex == TILE_SOLO_ENABLE) || (TileFIndex == TILE_SOLO_ENABLE)) && !Teams().m_Core.GetSolo(ClientId))
 	{
-		GameServer()->SendChatTarget(ClientID, "You are now in a solo part");
+		GameServer()->SendChatTarget(ClientId, "You are now in a solo part");
 		pChr->SetSolo(true);
 	}
-	else if(((m_TileIndex == TILE_SOLO_DISABLE) || (m_TileFIndex == TILE_SOLO_DISABLE)) && m_Teams.m_Core.GetSolo(ClientID))
+	else if(((TileIndex == TILE_SOLO_DISABLE) || (TileFIndex == TILE_SOLO_DISABLE)) && Teams().m_Core.GetSolo(ClientId))
 	{
-		GameServer()->SendChatTarget(ClientID, "You are now out of the solo part");
+		GameServer()->SendChatTarget(ClientId, "You are now out of the solo part");
 		pChr->SetSolo(false);
 	}
 }
@@ -216,13 +217,13 @@ using namespace std;
 void CGameControllerDDRace::OnPlayerConnect(CPlayer *pPlayer)
 {
 	IGameController::OnPlayerConnect(pPlayer);
-	int ClientID = pPlayer->GetCID();
+	int ClientId = pPlayer->GetCid();
 
 	if(!Server()->ClientPrevIngame(ClientID))
 	{
 		char aBuf[512];
-		str_format(aBuf, sizeof(aBuf), "'%s' entered and joined the %s", Server()->ClientName(ClientID), GetTeamName(pPlayer->GetTeam()));
-		GameServer()->SendChat(-1, CGameContext::CHAT_ALL, aBuf, -1, CGameContext::CHAT_SIX);
+		str_format(aBuf, sizeof(aBuf), "'%s' entered and joined the %s", Server()->ClientName(ClientId), GetTeamName(pPlayer->GetTeam()));
+		GameServer()->SendChat(-1, TEAM_ALL, aBuf, -1, CGameContext::FLAG_SIX);
 
 		GameServer()->SendChatTarget(ClientID, "welcome to iCTFX!");
 		GameServer()->SendChatTarget(ClientID, "Version: 1.2");
@@ -266,13 +267,13 @@ void CGameControllerDDRace::OnPlayerNameChange(class CPlayer *pPlayer)
 
 void CGameControllerDDRace::OnPlayerDisconnect(CPlayer *pPlayer, const char *pReason)
 {
-	int ClientID = pPlayer->GetCID();
-	bool WasModerator = pPlayer->m_Moderating && Server()->ClientIngame(ClientID);
+	int ClientId = pPlayer->GetCid();
+	bool WasModerator = pPlayer->m_Moderating && Server()->ClientIngame(ClientId);
 
 	IGameController::OnPlayerDisconnect(pPlayer, pReason);
 
 	if(!GameServer()->PlayerModerating() && WasModerator)
-		GameServer()->SendChat(-1, CGameContext::CHAT_ALL, "Server kick/spec votes are no longer actively moderated.");
+		GameServer()->SendChat(-1, TEAM_ALL, "Server kick/spec votes are no longer actively moderated.");
 
 	if(g_Config.m_SvTeam != SV_TEAM_FORCED_SOLO)
 		m_Teams.SetForceCharacterTeam(ClientID, TEAM_FLOCK);
@@ -644,8 +645,8 @@ void CGameControllerDDRace::DoTeamChange(class CPlayer *pPlayer, int Team, bool 
 			// Joining spectators should not kill a locked team, but should still
 			// check if the team finished by you leaving it.
 			int DDRTeam = pCharacter->Team();
-			m_Teams.SetForceCharacterTeam(pPlayer->GetCID(), TEAM_FLOCK);
-			m_Teams.CheckTeamFinished(DDRTeam);
+			Teams().SetForceCharacterTeam(pPlayer->GetCid(), TEAM_FLOCK);
+			Teams().CheckTeamFinished(DDRTeam);
 		}
 	}
 

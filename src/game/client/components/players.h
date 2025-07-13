@@ -11,36 +11,51 @@ class CPlayers : public CComponent
 {
 	friend class CGhost;
 
-	CTeeRenderInfo m_RenderInfoSpec;
-	CTeeRenderInfo m_aRenderInfo[MAX_CLIENTS];
-	void RenderHand(class CTeeRenderInfo *pInfo, vec2 CenterPos, vec2 Dir, float AngleOffset, vec2 PostRotOffset, float Alpha = 1.0f);
+	void RenderHand6(const CTeeRenderInfo *pInfo, vec2 HandPos, float HandAngle, float Alpha);
+	void RenderHand7(const CTeeRenderInfo *pInfo, vec2 HandPos, float HandAngle, float Alpha);
+
+	void RenderHand(const CTeeRenderInfo *pInfo, vec2 CenterPos, vec2 Dir, float AngleOffset, vec2 PostRotOffset, float Alpha);
 	void RenderPlayer(
 		const CNetObj_Character *pPrevChar,
 		const CNetObj_Character *pPlayerChar,
 		const CTeeRenderInfo *pRenderInfo,
-		int ClientID,
+		int ClientId,
 		float Intra = 0.f);
 	void RenderHook(
 		const CNetObj_Character *pPrevChar,
 		const CNetObj_Character *pPlayerChar,
 		const CTeeRenderInfo *pRenderInfo,
-		int ClientID,
+		int ClientId,
 		float Intra = 0.f);
 	void RenderHookCollLine(
 		const CNetObj_Character *pPrevChar,
 		const CNetObj_Character *pPlayerChar,
-		int ClientID,
+		int ClientId,
 		float Intra = 0.f);
-	bool IsPlayerInfoAvailable(int ClientID) const;
+	bool IsPlayerInfoAvailable(int ClientId) const;
 
 	int m_WeaponEmoteQuadContainerIndex;
-	int m_WeaponSpriteMuzzleQuadContainerIndex[NUM_WEAPONS];
+	int m_aWeaponSpriteMuzzleQuadContainerIndex[NUM_WEAPONS];
+
+	void CreateNinjaTeeRenderInfo();
+	void CreateSpectatorTeeRenderInfo();
+
+	std::shared_ptr<CManagedTeeRenderInfo> m_pNinjaTeeRenderInfo;
+	std::shared_ptr<CManagedTeeRenderInfo> m_pSpectatorTeeRenderInfo;
 
 public:
-	vec2 m_CurPredictedPos[MAX_CLIENTS];
-	virtual int Sizeof() const override { return sizeof(*this); }
-	virtual void OnInit() override;
-	virtual void OnRender() override;
+	float GetPlayerTargetAngle(
+		const CNetObj_Character *pPrevChar,
+		const CNetObj_Character *pPlayerChar,
+		int ClientId,
+		float Intra = 0.0f);
+
+	int Sizeof() const override { return sizeof(*this); }
+	void OnInit() override;
+	void OnRender() override;
+
+	const std::shared_ptr<CManagedTeeRenderInfo> &NinjaTeeRenderInfo() const { return m_pNinjaTeeRenderInfo; }
+	const std::shared_ptr<CManagedTeeRenderInfo> &SpectatorTeeRenderInfo() const { return m_pSpectatorTeeRenderInfo; }
 };
 
 #endif

@@ -1,54 +1,79 @@
 /* (c) Magnus Auvinen. See licence.txt in the root of the distribution for more information. */
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
+
+#include <base/logger.h>
 #include <base/system.h>
+
 #include <engine/shared/datafile.h>
 #include <engine/storage.h>
 
-int main(int argc, const char **argv)
+static const char *TOOL_NAME = "map_resave";
+
+static int ResaveMap(const char *pSourceMap, const char *pDestinationMap, IStorage *pStorage)
 {
-	cmdline_fix(&argc, &argv);
-	IStorage *pStorage = CreateStorage("Teeworlds", IStorage::STORAGETYPE_BASIC, argc, argv);
-	int Index, ID = 0, Type = 0, Size;
-	void *pPtr;
-	char aFileName[IO_MAX_PATH_LENGTH];
-	CDataFileReader DataFile;
-	CDataFileWriter df;
-
-	if(!pStorage || argc != 3)
+	CDataFileReader Reader;
+	if(!Reader.Open(pStorage, pSourceMap, IStorage::TYPE_ABSOLUTE))
+	{
+		log_error(TOOL_NAME, "Failed to open source map '%s' for reading", pSourceMap);
 		return -1;
+	}
 
-	str_format(aFileName, sizeof(aFileName), "%s", argv[2]);
-
-	if(!DataFile.Open(pStorage, argv[1], IStorage::TYPE_ABSOLUTE))
+	CDataFileWriter Writer;
+	if(!Writer.Open(pStorage, pDestinationMap))
+	{
+		log_error(TOOL_NAME, "Failed to open destination map '%s' for writing", pDestinationMap);
+		Reader.Close();
 		return -1;
-	if(!df.Open(pStorage, aFileName))
-		return -1;
+	}
 
 	// add all items
-	for(Index = 0; Index < DataFile.NumItems(); Index++)
+	for(int Index = 0; Index < Reader.NumItems(); Index++)
 	{
-		pPtr = DataFile.GetItem(Index, &Type, &ID);
-		Size = DataFile.GetItemSize(Index);
+		int Type, Id;
+		CUuid Uuid;
+		const void *pPtr = Reader.GetItem(Index, &Type, &Id, &Uuid);
 
-		// filter ITEMTYPE_EX items, they will be automatically added again
+		// Filter ITEMTYPE_EX items, they will be automatically added again.
 		if(Type == ITEMTYPE_EX)
 		{
 			continue;
 		}
 
-		df.AddItem(Type, ID, Size, pPtr);
+		int Size = Reader.GetItemSize(Index);
+		Writer.AddItem(Type, Id, Size, pPtr, &Uuid);
 	}
 
 	// add all data
-	for(Index = 0; Index < DataFile.NumData(); Index++)
+	for(int Index = 0; Index < Reader.NumData(); Index++)
 	{
-		pPtr = DataFile.GetData(Index);
-		Size = DataFile.GetDataSize(Index);
-		df.AddData(Size, pPtr);
+		const void *pPtr = Reader.GetData(Index);
+		int Size = Reader.GetDataSize(Index);
+		Writer.AddData(Size, pPtr);
 	}
 
-	DataFile.Close();
-	df.Finish();
-	cmdline_free(argc, argv);
+	Reader.Close();
+	Writer.Finish();
+	log_info(TOOL_NAME, "Resaved '%s' to '%s'", pSourceMap, pDestinationMap);
 	return 0;
+}
+
+int main(int argc, const char **argv)
+{
+	CCmdlineFix CmdlineFix(&argc, &argv);
+	log_set_global_logger_default();
+
+	if(argc != 3)
+	{
+		log_error(TOOL_NAME, "Usage: %s <source map> <destination map>", TOOL_NAME);
+		return -1;
+	}
+
+	std::unique_ptr<IStorage> pStorage = std::unique_ptr<IStorage>(CreateStorage(IStorage::EInitializationType::BASIC, argc, argv));
+	if(!pStorage)
+	{
+		log_error(TOOL_NAME, "Error creating basic storage");
+		return -1;
+	}
+
+	return ResaveMap(argv[1], argv[2], pStorage.get());
 }

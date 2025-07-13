@@ -5,12 +5,16 @@ import sys
 import twlang
 
 def copy_fix(infile, delete_unused, append_missing, delete_empty):
-	content = open(infile).readlines()
+	with open(infile, encoding="utf-8") as f:
+		content = f.readlines()
+		if content and not content[-1].endswith("\n"):
+			content[-1] += "\n"
 	trans = twlang.translations(infile)
 	if delete_unused or append_missing:
 		local = twlang.localizes()
-	if append_missing:
-		supported = []
+	else:
+		local = []
+	supported = []
 	for tran, (start, expr, end) in trans.items():
 		if delete_unused and tran not in local:
 			content[start:end] = [None]*(end-start)
@@ -59,7 +63,8 @@ def main(argv):
 
 	content = copy_fix(infile, delete_unused, append_missing, delete_empty)
 
-	open(outfile, "w").write("".join(content))
+	with open(outfile, "w", encoding="utf-8") as f:
+		f.write("".join(content))
 	print("Successfully created '" + outfile + "'.")
 
 if __name__ == '__main__':

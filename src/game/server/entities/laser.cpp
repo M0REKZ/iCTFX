@@ -1,15 +1,17 @@
 /* (c) Magnus Auvinen. See licence.txt in the root of the distribution for more information. */
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 #include "laser.h"
-#include <game/generated/protocol.h>
-#include <game/server/gamecontext.h>
-#include <game/server/gamemodes/DDRace.h>
+#include "character.h"
 
 #include <engine/shared/config.h>
-#include <game/server/teams.h>
 
 #include "character.h"
 #include "../player.h"
+#include <game/generated/protocol.h>
+#include <game/mapitems.h>
+
+#include <game/server/gamecontext.h>
+#include <game/server/gamemodes/DDRace.h>
 
 CLaser::CLaser(CGameWorld *pGameWorld, vec2 Pos, vec2 Direction, float StartEnergy, CPlayer *pPlayer, int Type) :
 	CEntity(pGameWorld, CGameWorld::ENTTYPE_LASER)
@@ -32,9 +34,10 @@ CLaser::CLaser(CGameWorld *pGameWorld, vec2 Pos, vec2 Direction, float StartEner
 
 	m_DidHit = false;
 
+	m_ZeroEnergyBounceInLastTick = false;
 	m_TuneZone = GameServer()->Collision()->IsTune(GameServer()->Collision()->GetMapIndex(m_Pos));
 	CCharacter *pOwnerChar = GameServer()->GetPlayerChar(m_Owner);
-	m_TeamMask = pOwnerChar ? pOwnerChar->Teams()->TeamMask(pOwnerChar->Team(), -1, m_Owner) : 0;
+	m_TeamMask = pOwnerChar ? pOwnerChar->TeamMask() : CClientMask();
 	m_BelongsToPracticeTeam = pOwnerChar && pOwnerChar->Teams()->IsPractice(pOwnerChar->Team());
 	
 	if (pPlayer) {
@@ -68,6 +71,7 @@ CLaser::~CLaser() {
 
 bool CLaser::HitCharacter(vec2 From, vec2 To)
 {
+	static const vec2 StackedLaserShotgunBugSpeed = vec2(-2147483648.0f, -2147483648.0f);
 	vec2 At;
 	CCharacter *pOwnerChar = GameServer()->GetPlayerChar(m_Owner);
 	CCharacter *pHit;
@@ -189,19 +193,54 @@ void CLaser::DoBounce()
 			vec2 TempPos = m_Pos;
 			vec2 TempDir = m_Dir * 4.0f;
 
-			GameServer()->Collision()->MovePoint(&TempPos, &TempDir, 1.0f, 0);
+			int f = 0;
+			if(Res == -1)
+			{
+				f = GameServer()->Collision()->GetTile(round_to_int(Coltile.x), round_to_int(Coltile.y));
+				GameServer()->Collision()->SetCollisionAt(round_to_int(Coltile.x), round_to_int(Coltile.y), TILE_SOLID);
+			}
+			GameServer()->Collision()->MovePoint(&TempPos, &TempDir, 1.0f, nullptr);
+			if(Res == -1)
+			{
+				GameServer()->Collision()->SetCollisionAt(round_to_int(Coltile.x), round_to_int(Coltile.y), f);
+			}
 			m_Pos = TempPos;
 			
 			if(!teleptr)
 				m_Dir = normalize(TempDir);
 
-			m_Energy -= distance(m_From, m_Pos) + GameServer()->Tuning()->m_LaserBounceCost;
-			
-			if(!teleptr)
+			const float Distance = distance(m_From, m_Pos);
+			// Prevent infinite bounces
+			if(Distance == 0.0f && m_ZeroEnergyBounceInLastTick)
+			{
+				m_Energy = -1;
+			}
+			else if(!m_TuneZone)
+			{
+				m_Energy -= Distance + Tuning()->m_LaserBounceCost;
+			}
+			else
+			{
+				m_Energy -= distance(m_From, m_Pos) + GameServer()->TuningList()[m_TuneZone].m_LaserBounceCost;
+			}
+			m_ZeroEnergyBounceInLastTick = Distance == 0.0f;
+
+			if(Res == TILE_TELEINWEAPON && !GameServer()->Collision()->TeleOuts(z - 1).empty())
+			{
+				int TeleOut = GameServer()->m_World.m_Core.RandomOr0(GameServer()->Collision()->TeleOuts(z - 1).size());
+				m_TelePos = GameServer()->Collision()->TeleOuts(z - 1)[TeleOut];
+				m_WasTele = true;
+			}
+			else
+			{
 				m_Bounces++;
 			
 
-			if(m_Bounces > GameServer()->Tuning()->m_LaserBounceNum && !teleptr)
+			int BounceNum = Tuning()->m_LaserBounceNum;
+			if(m_TuneZone)
+				BounceNum = TuningList()[m_TuneZone].m_LaserBounceNum;
+
+			if(m_Bounces > BounceNum)
 				m_Energy = -1;
 
 			GameServer()->CreateSound(m_Pos, SOUND_LASER_BOUNCE, m_TeamMask);
@@ -225,6 +264,67 @@ void CLaser::DoBounce()
 			m_Energy = -1;
 		}
 	}
+
+	CCharacter *pOwnerChar = GameServer()->GetPlayerChar(m_Owner);
+	if(m_Owner >= 0 && m_Energy <= 0 && !m_TeleportCancelled && pOwnerChar &&
+		pOwnerChar->IsAlive() && pOwnerChar->HasTelegunLaser() && m_Type == WEAPON_LASER)
+	{
+		vec2 PossiblePos;
+		bool Found = false;
+
+		// Check if the laser hits a player.
+		bool pDontHitSelf = g_Config.m_SvOldLaser || (m_Bounces == 0 && !m_WasTele);
+		vec2 At;
+		CCharacter *pHit;
+		if(pOwnerChar ? (!pOwnerChar->LaserHitDisabled() && m_Type == WEAPON_LASER) : g_Config.m_SvHit)
+			pHit = GameServer()->m_World.IntersectCharacter(m_Pos, To, 0.f, At, pDontHitSelf ? pOwnerChar : nullptr, m_Owner);
+		else
+			pHit = GameServer()->m_World.IntersectCharacter(m_Pos, To, 0.f, At, pDontHitSelf ? pOwnerChar : nullptr, m_Owner, pOwnerChar);
+
+		if(pHit)
+			Found = GetNearestAirPosPlayer(pHit->m_Pos, &PossiblePos);
+		else
+			Found = GetNearestAirPos(m_Pos, m_From, &PossiblePos);
+
+		if(Found)
+		{
+			pOwnerChar->m_TeleGunPos = PossiblePos;
+			pOwnerChar->m_TeleGunTeleport = true;
+			pOwnerChar->m_IsBlueTeleGunTeleport = m_IsBlueTeleport;
+		}
+	}
+	else if(m_Owner >= 0)
+	{
+		int MapIndex = GameServer()->Collision()->GetPureMapIndex(Coltile);
+		int TileFIndex = GameServer()->Collision()->GetFrontTileIndex(MapIndex);
+		bool IsSwitchTeleGun = GameServer()->Collision()->GetSwitchType(MapIndex) == TILE_ALLOW_TELE_GUN;
+		bool IsBlueSwitchTeleGun = GameServer()->Collision()->GetSwitchType(MapIndex) == TILE_ALLOW_BLUE_TELE_GUN;
+		int IsTeleInWeapon = GameServer()->Collision()->IsTeleportWeapon(MapIndex);
+
+		if(!IsTeleInWeapon)
+		{
+			if(IsSwitchTeleGun || IsBlueSwitchTeleGun)
+			{
+				// Delay specifies which weapon the tile should work for.
+				// Delay = 0 means all.
+				int delay = GameServer()->Collision()->GetSwitchDelay(MapIndex);
+
+				if((delay != 3 && delay != 0) && m_Type == WEAPON_LASER)
+				{
+					IsSwitchTeleGun = IsBlueSwitchTeleGun = false;
+				}
+			}
+
+			m_IsBlueTeleport = TileFIndex == TILE_ALLOW_BLUE_TELE_GUN || IsBlueSwitchTeleGun;
+
+			// Teleport is canceled if the last bounce tile is not a TILE_ALLOW_TELE_GUN.
+			// Teleport also works if laser didn't bounce.
+			m_TeleportCancelled =
+				m_Type == WEAPON_LASER && (TileFIndex != TILE_ALLOW_TELE_GUN && TileFIndex != TILE_ALLOW_BLUE_TELE_GUN && !IsSwitchTeleGun && !IsBlueSwitchTeleGun);
+		}
+	}
+
+	//m_Owner = -1;
 }
 
 void CLaser::Reset()
@@ -294,6 +394,15 @@ void CLaser::Tick()
 			}
 		}
 	}
+
+	float Delay;
+	if(m_TuneZone)
+		Delay = TuningList()[m_TuneZone].m_LaserBounceDelay;
+	else
+		Delay = Tuning()->m_LaserBounceDelay;
+
+	if((Server()->Tick() - m_EvalTick) > (Server()->TickSpeed() * Delay / 1000.0f))
+		DoBounce();
 }
 
 void CLaser::TickPaused()

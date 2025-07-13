@@ -1,6 +1,8 @@
 #include "backend_null.h"
 
-bool CCommandProcessorFragment_Null::RunCommand(const CCommandBuffer::SCommand *pBaseCommand)
+#include <engine/client/backend_sdl.h>
+
+ERunCommandReturnTypes CCommandProcessorFragment_Null::RunCommand(const CCommandBuffer::SCommand *pBaseCommand)
 {
 	switch(pBaseCommand->m_Cmd)
 	{
@@ -17,7 +19,7 @@ bool CCommandProcessorFragment_Null::RunCommand(const CCommandBuffer::SCommand *
 		Cmd_TextTexture_Update(static_cast<const CCommandBuffer::SCommand_TextTexture_Update *>(pBaseCommand));
 		break;
 	}
-	return true;
+	return ERunCommandReturnTypes::RUN_COMMAND_COMMAND_HANDLED;
 }
 
 bool CCommandProcessorFragment_Null::Cmd_Init(const SCommand_Init *pCommand)

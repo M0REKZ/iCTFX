@@ -3,22 +3,25 @@
 #ifndef GAME_SERVER_ENTITIES_CHARACTER_H
 #define GAME_SERVER_ENTITIES_CHARACTER_H
 
-#include <engine/antibot.h>
 #include <game/server/entity.h>
 
-class CAntibot;
+#include <game/race_state.h>
+#include <game/server/save.h>
+
 class CGameTeams;
+class CGameWorld;
+class IAntibot;
 struct CAntibotCharacterData;
 
 enum
 {
-	FAKETUNE_FREEZE = 1,
-	FAKETUNE_SOLO = 2,
-	FAKETUNE_NOJUMP = 4,
-	FAKETUNE_NOCOLL = 8,
-	FAKETUNE_NOHOOK = 16,
-	FAKETUNE_JETPACK = 32,
-	FAKETUNE_NOHAMMER = 64,
+	FAKETUNE_FREEZE = 1 << 0,
+	FAKETUNE_SOLO = 1 << 1,
+	FAKETUNE_NOJUMP = 1 << 2,
+	FAKETUNE_NOCOLL = 1 << 3,
+	FAKETUNE_NOHOOK = 1 << 4,
+	FAKETUNE_JETPACK = 1 << 5,
+	FAKETUNE_NOHAMMER = 1 << 6,
 };
 
 #define POSITION_HISTORY 50
@@ -31,23 +34,37 @@ public:
 	vec2 m_Positions[POSITION_HISTORY];
 	//character's size
 	static const int ms_PhysSize = 28;
+	// need to use core
+	friend class CSaveTee;
+	friend class CSaveHotReloadTee;
 
-	CCharacter(CGameWorld *pWorld);
+public:
+	CCharacter(CGameWorld *pWorld, CNetObj_PlayerInput LastInput);
 
-	virtual void Reset();
-	virtual void Destroy();
-	virtual void Tick();
-	virtual void TickDefered();
-	virtual void TickPaused();
-	virtual void Snap(int SnappingClient);
+	void Reset() override;
+	void Destroy() override;
+	void PreTick();
+	void Tick() override;
+	void TickDeferred() override;
+	void TickPaused() override;
+	void Snap(int SnappingClient) override;
+	void PostSnap() override;
+	void SwapClients(int Client1, int Client2) override;
 
 	bool CanSnapCharacter(int SnappingClient);
+	bool IsSnappingCharacterInView(int SnappingClientId);
 
 	bool IsGrounded();
 
 	void SetWeapon(int W);
+	void SetJetpack(bool Active);
+	void SetEndlessJump(bool Active);
+	void SetJumps(int Jumps);
 	void SetSolo(bool Solo);
+	void SetSuper(bool Super);
+	void SetInvincible(bool Invincible);
 	void SetLiveFrozen(bool Active);
+	void SetDeepFrozen(bool Active);
 	void HandleWeaponSwitch();
 	void DoWeaponSwitch();
 
@@ -57,6 +74,7 @@ public:
 
 	void OnPredictedInput(CNetObj_PlayerInput *pNewInput);
 	void OnDirectInput(CNetObj_PlayerInput *pNewInput);
+	void ReleaseHook();
 	void ResetHook();
 	void ResetInput();
 	void FireWeapon();
@@ -84,11 +102,20 @@ public:
 
 	void Rescue();
 
-	int NeededFaketuning() { return m_NeededFaketuning; }
+	int NeededFaketuning() const { return m_NeededFaketuning; }
 	bool IsAlive() const { return m_Alive; }
 	bool IsPaused() const { return m_Paused; }
 	class CPlayer *GetPlayer() { return m_pPlayer; }
-	int64_t TeamMask();
+	CClientMask TeamMask();
+
+	void SetPosition(const vec2 &Position);
+	void Move(vec2 RelPos);
+
+	void ResetVelocity();
+	void SetVelocity(vec2 NewVelocity);
+	void SetRawVelocity(vec2 NewVelocity);
+	void AddVelocity(vec2 Addition);
+	void ApplyMoveRestrictions();
 
 	// player controlling this character
 	class CPlayer *m_pPlayer;
@@ -97,26 +124,20 @@ private:
 
 	bool m_Alive;
 	bool m_Paused;
+	int m_PausedTick;
 	int m_NeededFaketuning;
 
 	// weapon info
 	CEntity *m_apHitObjects[10];
 	int m_NumObjectsHit;
 
-	struct WeaponStat
-	{
-		int m_AmmoRegenStart;
-		int m_Ammo;
-		int m_Ammocost;
-		bool m_Got;
-
-	} m_aWeapons[NUM_WEAPONS];
-
 	int m_LastWeapon;
 	int m_QueuedWeapon;
 
 	int m_ReloadTimer;
 	int m_AttackTick;
+
+	int m_MoveRestrictions;
 
 	int m_DamageTaken;
 
@@ -137,26 +158,15 @@ private:
 	CNetObj_PlayerInput m_Input;
 	CNetObj_PlayerInput m_SavedInput;
 	int m_NumInputs;
-	int m_Jumped;
 
 	int m_DamageTakenTick;
 
 	int m_Health;
 	int m_Armor;
 
-	// ninja
-	struct
-	{
-		vec2 m_ActivationDir;
-		int m_ActivationTick;
-		int m_CurrentMoveTime;
-		int m_OldVelAmount;
-	} m_Ninja;
+	int m_TriggeredEvents7;
 
 	CGameTeams *m_pTeams = nullptr;
-
-	std::map<int, std::vector<vec2>> *m_pTeleOuts = nullptr;
-	std::map<int, std::vector<vec2>> *m_pTeleCheckOuts = nullptr;
 
 	// info for dead reckoning
 	int m_ReckoningTick; // tick that we are performing dead reckoning From
@@ -165,26 +175,28 @@ private:
 
 	// DDRace
 
-	void SnapCharacter(int SnappingClient, int ID);
+	void SnapCharacter(int SnappingClient, int Id);
 	static bool IsSwitchActiveCb(int Number, void *pUser);
+	void SetTimeCheckpoint(int TimeCheckpoint);
 	void HandleTiles(int Index);
 	float m_Time;
 	int m_LastBroadcast;
 	void DDRaceInit();
 	void HandleSkippableTiles(int Index);
+	void ForceSetRescue(int RescueMode);
 	void DDRaceTick();
 	void DDRacePostCoreTick();
 	void HandleTuneLayer();
 	void SendZoneMsgs();
 	IAntibot *Antibot();
 
-	bool m_SetSavePos;
-	bool m_Solo;
+	bool m_SetSavePos[NUM_RESCUEMODES];
+	CSaveTee m_RescueTee[NUM_RESCUEMODES];
 
 public:
 	CGameTeams *Teams() { return m_pTeams; }
 	void SetTeams(CGameTeams *pTeams);
-	void SetTeleports(std::map<int, std::vector<vec2>> *pTeleOuts, std::map<int, std::vector<vec2>> *pTeleCheckOuts);
+	bool TrySetRescue(int RescueMode);
 
 	// the player core for the physics
 	CCharacterCore m_Core;
@@ -196,31 +208,16 @@ public:
 	bool UnFreeze();
 	void GiveAllWeapons();
 	void ResetPickups();
-	int m_DDRaceState;
+	void ResetJumps();
+	ERaceState m_DDRaceState;
 	int Team();
-	bool CanCollide(int ClientID);
-	bool SameTeam(int ClientID);
-	bool m_Super;
-	bool m_SuperJump;
-	bool m_Jetpack;
+	bool CanCollide(int ClientId) override;
+	bool SameTeam(int ClientId);
+	void StopRecording();
 	bool m_NinjaJetpack;
 	int m_TeamBeforeSuper;
 	int m_FreezeTime;
-	int m_FreezeTick;
 	bool m_FrozenLastTick;
-	bool m_DeepFreeze;
-	bool m_LiveFreeze;
-	bool m_EndlessHook;
-	bool m_FreezeHammer;
-	enum
-	{
-		HIT_ALL = 0,
-		DISABLE_HIT_HAMMER = 1,
-		DISABLE_HIT_SHOTGUN = 2,
-		DISABLE_HIT_GRENADE = 4,
-		DISABLE_HIT_LASER = 8
-	};
-	int m_Hit;
 	int m_TuneZone;
 	int m_TuneZoneOld;
 	int m_PainSoundTimer;
@@ -228,16 +225,15 @@ public:
 	int m_StartTime;
 	vec2 m_PrevPos;
 	int m_TeleCheckpoint;
-	int m_CpTick;
-	int m_CpActive;
-	int m_CpLastBroadcast;
-	float m_CpCurrent[25];
+
+	int m_TimeCpBroadcastEndTick;
+	int m_LastTimeCp;
+	int m_LastTimeCpBroadcasted;
+	float m_aCurrentTimeCp[MAX_CHECKPOINTS];
+
 	int m_TileIndex;
 	int m_TileFIndex;
 
-	int m_MoveRestrictions;
-
-	vec2 m_Intersection;
 	int64_t m_LastStartWarning;
 	int64_t m_LastRescue;
 	bool m_LastRefillJumps;
@@ -246,44 +242,45 @@ public:
 	vec2 m_TeleGunPos;
 	bool m_TeleGunTeleport;
 	bool m_IsBlueTeleGunTeleport;
-	int m_StrongWeakID;
+	int m_StrongWeakId;
 
 	int m_SpawnTick;
 	int m_WeaponChangeTick;
 
 	// Setters/Getters because i don't want to modify vanilla vars access modifiers
-	int GetLastWeapon() { return m_LastWeapon; }
+	int GetLastWeapon() const { return m_LastWeapon; }
 	void SetLastWeapon(int LastWeap) { m_LastWeapon = LastWeap; }
-	int GetActiveWeapon() { return m_Core.m_ActiveWeapon; }
+	int GetActiveWeapon() const { return m_Core.m_ActiveWeapon; }
 	void SetActiveWeapon(int ActiveWeap) { m_Core.m_ActiveWeapon = ActiveWeap; }
 	void SetLastAction(int LastAction) { m_LastAction = LastAction; }
-	int GetArmor() { return m_Armor; }
+	int GetArmor() const { return m_Armor; }
 	void SetArmor(int Armor) { m_Armor = Armor; }
 	CCharacterCore GetCore() { return m_Core; }
 	void SetCore(CCharacterCore Core) { m_Core = Core; }
-	CCharacterCore *Core() { return &m_Core; }
-	bool GetWeaponGot(int Type) { return m_aWeapons[Type].m_Got; }
-	void SetWeaponGot(int Type, bool Value) { m_aWeapons[Type].m_Got = Value; }
-	int GetWeaponAmmo(int Type) { return m_aWeapons[Type].m_Ammo; }
-	void SetWeaponAmmo(int Type, int Value) { m_aWeapons[Type].m_Ammo = Value; }
-	bool IsAlive() { return m_Alive; }
-	void SetNinjaActivationDir(vec2 ActivationDir) { m_Ninja.m_ActivationDir = ActivationDir; }
-	void SetNinjaActivationTick(int ActivationTick) { m_Ninja.m_ActivationTick = ActivationTick; }
-	void SetNinjaCurrentMoveTime(int CurrentMoveTime) { m_Ninja.m_CurrentMoveTime = CurrentMoveTime; }
+	const CCharacterCore *Core() const { return &m_Core; }
+	bool GetWeaponGot(int Type) { return m_Core.m_aWeapons[Type].m_Got; }
+	void SetWeaponGot(int Type, bool Value) { m_Core.m_aWeapons[Type].m_Got = Value; }
+	int GetWeaponAmmo(int Type) { return m_Core.m_aWeapons[Type].m_Ammo; }
+	void SetWeaponAmmo(int Type, int Value) { m_Core.m_aWeapons[Type].m_Ammo = Value; }
+	void SetNinjaActivationDir(vec2 ActivationDir) { m_Core.m_Ninja.m_ActivationDir = ActivationDir; }
+	void SetNinjaActivationTick(int ActivationTick) { m_Core.m_Ninja.m_ActivationTick = ActivationTick; }
+	void SetNinjaCurrentMoveTime(int CurrentMoveTime) { m_Core.m_Ninja.m_CurrentMoveTime = CurrentMoveTime; }
 
 	int GetLastAction() const { return m_LastAction; }
 
-	bool HasTelegunGun() { return m_Core.m_HasTelegunGun; }
-	bool HasTelegunGrenade() { return m_Core.m_HasTelegunGrenade; }
-	bool HasTelegunLaser() { return m_Core.m_HasTelegunLaser; }
-};
+	bool HasTelegunGun() const { return m_Core.m_HasTelegunGun; }
+	bool HasTelegunGrenade() const { return m_Core.m_HasTelegunGrenade; }
+	bool HasTelegunLaser() const { return m_Core.m_HasTelegunLaser; }
 
-enum
-{
-	DDRACE_NONE = 0,
-	DDRACE_STARTED,
-	DDRACE_CHEAT, // no time and won't start again unless ordered by a mod or death
-	DDRACE_FINISHED
+	bool HammerHitDisabled() const { return m_Core.m_HammerHitDisabled; }
+	bool ShotgunHitDisabled() const { return m_Core.m_ShotgunHitDisabled; }
+	bool LaserHitDisabled() const { return m_Core.m_LaserHitDisabled; }
+	bool GrenadeHitDisabled() const { return m_Core.m_GrenadeHitDisabled; }
+
+	bool IsSuper() const { return m_Core.m_Super; }
+
+	CSaveTee &GetLastRescueTeeRef(int Mode = RESCUEMODE_AUTO) { return m_RescueTee[Mode]; }
+	CTuningParams *GetTuning(int Zone) { return Zone ? &TuningList()[Zone] : Tuning(); }
 };
 
 #endif

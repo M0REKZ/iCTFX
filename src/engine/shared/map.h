@@ -3,7 +3,7 @@
 #ifndef ENGINE_SHARED_MAP_H
 #define ENGINE_SHARED_MAP_H
 
-#include <base/system.h>
+#include <base/types.h>
 
 #include "datafile.h"
 #include <engine/map.h>
@@ -15,29 +15,32 @@ class CMap : public IEngineMap
 public:
 	CMap();
 
-	virtual void *GetData(int Index);
-	virtual int GetDataSize(int Index);
-	virtual void *GetDataSwapped(int Index);
-	virtual void UnloadData(int Index);
-	virtual void *GetItem(int Index, int *pType, int *pID);
-	virtual int GetItemSize(int Index);
-	virtual void GetType(int Type, int *pStart, int *pNum);
-	virtual void *FindItem(int Type, int ID);
-	virtual int NumItems();
+	CDataFileReader *GetReader() { return &m_DataFile; }
 
-	virtual void Unload();
+	int GetDataSize(int Index) const override;
+	void *GetData(int Index) override;
+	void *GetDataSwapped(int Index) override;
+	const char *GetDataString(int Index) override;
+	void UnloadData(int Index) override;
+	int NumData() const override;
 
-	virtual bool Load(const char *pMapName);
+	int GetItemSize(int Index) override;
+	void *GetItem(int Index, int *pType = nullptr, int *pId = nullptr) override;
+	void GetType(int Type, int *pStart, int *pNum) override;
+	int FindItemIndex(int Type, int Id) override;
+	void *FindItem(int Type, int Id) override;
+	int NumItems() const override;
 
-	virtual bool IsLoaded();
+	[[nodiscard]] bool Load(const char *pMapName) override;
+	void Unload() override;
+	bool IsLoaded() const override;
+	IOHANDLE File() const override;
 
-	virtual SHA256_DIGEST Sha256();
+	SHA256_DIGEST Sha256() const override;
+	unsigned Crc() const override;
+	int MapSize() const override;
 
-	virtual unsigned Crc();
-
-	virtual int MapSize();
-
-	virtual IOHANDLE File();
+	static void ExtractTiles(class CTile *pDest, size_t DestSize, const class CTile *pSrc, size_t SrcSize);
 };
 
 #endif

@@ -1,15 +1,14 @@
 #include <algorithm>
-#include <base/math.h>
+#include <base/logger.h>
 #include <base/system.h>
 #include <cstdint>
+#include <engine/gfx/image_manipulation.h>
 #include <engine/shared/datafile.h>
-#include <engine/shared/image_manipulation.h>
 #include <engine/storage.h>
 #include <game/mapitems.h>
-#include <utility>
 #include <vector>
 
-void ClearTransparentPixels(uint8_t *pImg, int Width, int Height)
+static void ClearTransparentPixels(uint8_t *pImg, int Width, int Height)
 {
 	for(int y = 0; y < Height; ++y)
 	{
@@ -26,14 +25,14 @@ void ClearTransparentPixels(uint8_t *pImg, int Width, int Height)
 	}
 }
 
-void CopyOpaquePixels(uint8_t *pDestImg, uint8_t *pSrcImg, int Width, int Height)
+static void CopyOpaquePixels(uint8_t *pDestImg, uint8_t *pSrcImg, int Width, int Height)
 {
 	for(int y = 0; y < Height; ++y)
 	{
 		for(int x = 0; x < Width; ++x)
 		{
 			int Index = y * Width * 4 + x * 4;
-			if(pSrcImg[Index + 3] > TW_DILATE_ALPHA_THRESHOLD)
+			if(pSrcImg[Index + 3] > 0)
 				mem_copy(&pDestImg[Index], &pSrcImg[Index], sizeof(uint8_t) * 4);
 			else
 				mem_zero(&pDestImg[Index], sizeof(uint8_t) * 4);
@@ -41,7 +40,7 @@ void CopyOpaquePixels(uint8_t *pDestImg, uint8_t *pSrcImg, int Width, int Height
 	}
 }
 
-void ClearPixelsTile(uint8_t *pImg, int Width, int Height, int TileIndex)
+static void ClearPixelsTile(uint8_t *pImg, int Width, int Height, int TileIndex)
 {
 	int WTile = Width / 16;
 	int HTile = Height / 16;
@@ -61,40 +60,37 @@ void ClearPixelsTile(uint8_t *pImg, int Width, int Height, int TileIndex)
 	}
 }
 
-void GetImageSHA256(uint8_t *pImgBuff, int ImgSize, int Width, int Height, char *pSHA256Str)
+static void GetImageSHA256(uint8_t *pImgBuff, int ImgSize, int Width, int Height, char *pSHA256Str, size_t SHA256StrSize)
 {
 	uint8_t *pNewImgBuff = (uint8_t *)malloc(ImgSize);
 
-	// Get all image pixels, that have a alpha threshold over the default threshold,
-	// all other pixels are cleared to zero.
-	// This is required since dilate modifies pixels under the alpha threshold, which would alter the SHA.
+	// Clear fully transparent pixels, so the SHA is easier to identify with the original image
 	CopyOpaquePixels(pNewImgBuff, pImgBuff, Width, Height);
 	SHA256_DIGEST SHAStr = sha256(pNewImgBuff, (size_t)ImgSize);
 
-	sha256_str(SHAStr, pSHA256Str, SHA256_MAXSTRSIZE * sizeof(char));
+	sha256_str(SHAStr, pSHA256Str, SHA256StrSize);
 
 	free(pNewImgBuff);
 }
 
 int main(int argc, const char **argv)
 {
-	cmdline_fix(&argc, &argv);
-	dbg_logger_stdout();
+	CCmdlineFix CmdlineFix(&argc, &argv);
+	log_set_global_logger_default();
 
-	IStorage *pStorage = CreateStorage("Teeworlds", IStorage::STORAGETYPE_BASIC, argc, argv);
-	int ID = 0, Type = 0, Size;
-	void *pPtr;
-	char aFileName[IO_MAX_PATH_LENGTH];
-	CDataFileReader DataFile;
-	CDataFileWriter df;
-
-	if(!pStorage || argc <= 1 || argc > 3)
+	std::unique_ptr<IStorage> pStorage = std::unique_ptr<IStorage>(CreateStorage(IStorage::EInitializationType::BASIC, argc, argv));
+	if(!pStorage)
 	{
-		dbg_msg("map_optimize", "Invalid parameters or other unknown error.");
+		log_error("map_optimize", "Error creating basic storage");
+		return -1;
+	}
+	if(argc <= 1 || argc > 3)
+	{
 		dbg_msg("map_optimize", "Usage: map_optimize <source map filepath> [<dest map filepath>]");
 		return -1;
 	}
 
+	char aFileName[IO_MAX_PATH_LENGTH];
 	if(argc == 3)
 	{
 		str_format(aFileName, sizeof(aFileName), "out/%s", argv[2]);
@@ -109,23 +105,25 @@ int main(int argc, const char **argv)
 		str_format(aFileName, sizeof(aFileName), "out/%s.map", aBuff);
 	}
 
-	if(!DataFile.Open(pStorage, argv[1], IStorage::TYPE_ABSOLUTE))
+	CDataFileReader Reader;
+	if(!Reader.Open(pStorage.get(), argv[1], IStorage::TYPE_ABSOLUTE))
 	{
 		dbg_msg("map_optimize", "Failed to open source file.");
 		return -1;
 	}
 
-	if(!df.Open(pStorage, aFileName, IStorage::TYPE_ABSOLUTE))
+	CDataFileWriter Writer;
+	if(!Writer.Open(pStorage.get(), aFileName, IStorage::TYPE_ABSOLUTE))
 	{
 		dbg_msg("map_optimize", "Failed to open target file.");
 		return -1;
 	}
 
-	int aImageFlags[64] = {
+	int aImageFlags[MAX_MAPIMAGES] = {
 		0,
 	};
 
-	bool aImageTiles[64][256]{
+	bool aaImageTiles[MAX_MAPIMAGES][256]{
 		{
 			false,
 		},
@@ -139,19 +137,21 @@ int main(int argc, const char **argv)
 		int m_Text;
 	};
 
-	std::vector<SMapOptimizeItem> DataFindHelper;
+	std::vector<SMapOptimizeItem> vDataFindHelper;
 
 	// add all items
-	for(int Index = 0, i = 0; Index < DataFile.NumItems(); Index++)
+	for(int Index = 0, i = 0; Index < Reader.NumItems(); Index++)
 	{
-		pPtr = DataFile.GetItem(Index, &Type, &ID);
-		Size = DataFile.GetItemSize(Index);
+		int Type, Id;
+		CUuid Uuid;
+		void *pPtr = Reader.GetItem(Index, &Type, &Id, &Uuid);
 
-		// filter ITEMTYPE_EX items, they will be automatically added again
+		// Filter ITEMTYPE_EX items, they will be automatically added again.
 		if(Type == ITEMTYPE_EX)
 		{
 			continue;
 		}
+
 		// for all layers, check if it uses a image and set the corresponding flag
 		if(Type == MAPITEMTYPE_LAYER)
 		{
@@ -159,27 +159,23 @@ int main(int argc, const char **argv)
 			if(pLayer->m_Type == LAYERTYPE_TILES)
 			{
 				CMapItemLayerTilemap *pTLayer = (CMapItemLayerTilemap *)pLayer;
-				if(pTLayer->m_Image >= 0 && pTLayer->m_Image < 64 && pTLayer->m_Flags == 0)
+				if(pTLayer->m_Image >= 0 && pTLayer->m_Image < (int)MAX_MAPIMAGES && pTLayer->m_Flags == 0)
 				{
 					aImageFlags[pTLayer->m_Image] |= 1;
 					// check tiles that are used in this image
-					int DataIndex = pTLayer->m_Data;
-					unsigned int DataSize = DataFile.GetDataSize(DataIndex);
-					void *pTiles = DataFile.GetData(DataIndex);
-					unsigned int TileSize = sizeof(CTile);
+					unsigned int DataSize = Reader.GetDataSize(pTLayer->m_Data);
+					void *pTiles = Reader.GetData(pTLayer->m_Data);
 
-					if(DataSize >= pTLayer->m_Width * pTLayer->m_Height * TileSize)
+					if(DataSize >= (size_t)pTLayer->m_Width * pTLayer->m_Height * sizeof(CTile))
 					{
-						int x = 0;
-						int y = 0;
-						for(y = 0; y < pTLayer->m_Height; ++y)
+						for(int y = 0; y < pTLayer->m_Height; ++y)
 						{
-							for(x = 0; x < pTLayer->m_Width; ++x)
+							for(int x = 0; x < pTLayer->m_Width; ++x)
 							{
 								int TileIndex = ((CTile *)pTiles)[y * pTLayer->m_Width + x].m_Index;
 								if(TileIndex > 0)
 								{
-									aImageTiles[pTLayer->m_Image][TileIndex] = true;
+									aaImageTiles[pTLayer->m_Image][TileIndex] = true;
 								}
 							}
 						}
@@ -189,7 +185,7 @@ int main(int argc, const char **argv)
 			else if(pLayer->m_Type == LAYERTYPE_QUADS)
 			{
 				CMapItemLayerQuads *pQLayer = (CMapItemLayerQuads *)pLayer;
-				if(pQLayer->m_Image >= 0 && pQLayer->m_Image < 64)
+				if(pQLayer->m_Image >= 0 && pQLayer->m_Image < (int)MAX_MAPIMAGES)
 				{
 					aImageFlags[pQLayer->m_Image] |= 2;
 				}
@@ -197,33 +193,33 @@ int main(int argc, const char **argv)
 		}
 		else if(Type == MAPITEMTYPE_IMAGE)
 		{
-			CMapItemImage *pImg = (CMapItemImage *)pPtr;
-			if(!pImg->m_External)
+			CMapItemImage_v2 *pImg = (CMapItemImage_v2 *)pPtr;
+			if(!pImg->m_External && pImg->m_Version < 2)
 			{
 				SMapOptimizeItem Item;
 				Item.m_pImage = pImg;
 				Item.m_Index = i;
 				Item.m_Data = pImg->m_ImageData;
 				Item.m_Text = pImg->m_ImageName;
-				DataFindHelper.push_back(Item);
+				vDataFindHelper.push_back(Item);
 			}
 
 			// found an image
 			++i;
 		}
 
-		df.AddItem(Type, ID, Size, pPtr);
+		int Size = Reader.GetItemSize(Index);
+		Writer.AddItem(Type, Id, Size, pPtr, &Uuid);
 	}
 
 	// add all data
-	int Index;
-	for(Index = 0; Index < DataFile.NumData(); Index++)
+	for(int Index = 0; Index < Reader.NumData(); Index++)
 	{
 		bool DeletePtr = false;
-		pPtr = DataFile.GetData(Index);
-		Size = DataFile.GetDataSize(Index);
-		std::vector<SMapOptimizeItem>::iterator it = std::find_if(DataFindHelper.begin(), DataFindHelper.end(), [Index](const SMapOptimizeItem &Other) -> bool { return Other.m_Data == Index || Other.m_Text == Index; });
-		if(it != DataFindHelper.end())
+		void *pPtr = Reader.GetData(Index);
+		int Size = Reader.GetDataSize(Index);
+		auto it = std::find_if(vDataFindHelper.begin(), vDataFindHelper.end(), [Index](const SMapOptimizeItem &Other) -> bool { return Other.m_Data == Index || Other.m_Text == Index; });
+		if(it != vDataFindHelper.end())
 		{
 			int Width = it->m_pImage->m_Width;
 			int Height = it->m_pImage->m_Height;
@@ -248,7 +244,7 @@ int main(int argc, const char **argv)
 				{
 					for(int i = 0; i < 256; ++i)
 					{
-						if(!aImageTiles[ImageIndex][i])
+						if(!aaImageTiles[ImageIndex][i])
 						{
 							ClearPixelsTile(pImgBuff, Width, Height, i);
 						}
@@ -260,7 +256,7 @@ int main(int argc, const char **argv)
 				}
 				else if(aImageFlags[ImageIndex] == 0)
 				{
-					mem_zero(pImgBuff, Width * Height * 4);
+					mem_zero(pImgBuff, (size_t)Width * Height * 4);
 				}
 				else
 				{
@@ -284,25 +280,25 @@ int main(int argc, const char **argv)
 							int ImgTileH = Height / 16;
 							int x = (i % 16) * ImgTileW;
 							int y = (i / 16) * ImgTileH;
-							DilateImageSub(pImgBuff, Width, Height, 4, x, y, ImgTileW, ImgTileH);
+							DilateImageSub(pImgBuff, Width, Height, x, y, ImgTileW, ImgTileH);
 						}
 					}
 					else
 					{
-						DilateImage(pImgBuff, Width, Height, 4);
+						DilateImage(pImgBuff, Width, Height);
 					}
 				}
 			}
 			else if(it->m_Text == Index)
 			{
 				char *pImgName = (char *)pPtr;
-				uint8_t *pImgBuff = (uint8_t *)DataFile.GetData(it->m_Data);
-				int ImgSize = DataFile.GetDataSize(it->m_Data);
+				uint8_t *pImgBuff = (uint8_t *)Reader.GetData(it->m_Data);
+				int ImgSize = Reader.GetDataSize(it->m_Data);
 
 				char aSHA256Str[SHA256_MAXSTRSIZE];
 				// This is the important function, that calculates the SHA256 in a special way
 				// Please read the comments inside the functions to understand it
-				GetImageSHA256(pImgBuff, ImgSize, Width, Height, aSHA256Str);
+				GetImageSHA256(pImgBuff, ImgSize, Width, Height, aSHA256Str, sizeof(aSHA256Str));
 
 				char aNewName[IO_MAX_PATH_LENGTH];
 				int StrLen = str_format(aNewName, std::size(aNewName), "%s_cut_%s", pImgName, aSHA256Str);
@@ -316,15 +312,14 @@ int main(int argc, const char **argv)
 			}
 		}
 
-		df.AddData(Size, pPtr, Z_BEST_COMPRESSION);
+		Writer.AddData(Size, pPtr, CDataFileWriter::COMPRESSION_BEST);
 
 		if(DeletePtr)
 			free(pPtr);
 	}
 
-	DataFile.Close();
-	df.Finish();
+	Reader.Close();
+	Writer.Finish();
 
-	cmdline_free(argc, argv);
 	return 0;
 }

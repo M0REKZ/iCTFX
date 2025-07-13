@@ -5,9 +5,13 @@
 
 #include <base/vmath.h>
 
-#include "alloc.h"
-#include "gamecontext.h"
+#include <game/alloc.h>
+
 #include "gameworld.h"
+#include "save.h"
+
+class CCollision;
+class CGameContext;
 
 /*
 	Class: Entity
@@ -18,13 +22,14 @@ class CEntity
 	MACRO_ALLOC_HEAP()
 
 private:
-	friend class CGameWorld; // entity list handling
+	friend CGameWorld; // entity list handling
 	CEntity *m_pPrevTypeEntity;
 
 	/* Identity */
-	class CGameWorld *m_pGameWorld;
+	CGameWorld *m_pGameWorld;
+	CCollision *m_pCCollision;
 
-	int m_ID;
+	int m_Id;
 	int m_ObjType;
 
 	/*
@@ -48,7 +53,7 @@ public: // TODO: Maybe make protected
 	float m_ProximityRadius;
 
 	/* Getters */
-	int GetID() const { return m_ID; }
+	int GetId() const { return m_Id; }
 
 	/* Constructor */
 	CEntity(CGameWorld *pGameWorld, int Objtype, vec2 Pos = vec2(0, 0), int ProximityRadius = 0);
@@ -57,10 +62,15 @@ public: // TODO: Maybe make protected
 	virtual ~CEntity();
 
 	/* Objects */
-	class CGameWorld *GameWorld() { return m_pGameWorld; }
+	std::vector<SSwitchers> &Switchers() { return m_pGameWorld->m_Core.m_vSwitchers; }
+	CGameWorld *GameWorld() { return m_pGameWorld; }
+	CTuningParams *Tuning() { return GameWorld()->Tuning(); }
+	CTuningParams *TuningList() { return GameWorld()->TuningList(); }
+	CTuningParams *GetTuning(int i) { return GameWorld()->GetTuning(i); }
 	class CConfig *Config() { return m_pGameWorld->Config(); }
 	class CGameContext *GameServer() { return m_pGameWorld->GameServer(); }
 	class IServer *Server() { return m_pGameWorld->Server(); }
+	CCollision *Collision() { return m_pCCollision; }
 
 	/* Getters */
 	CEntity *TypeNext() { return m_pNextTypeEntity; }
@@ -91,10 +101,10 @@ public: // TODO: Maybe make protected
 	virtual void Tick() {}
 
 	/*
-		Function: TickDefered
+		Function: TickDeferred
 			Called after all entities Tick() function has been called.
 	*/
-	virtual void TickDefered() {}
+	virtual void TickDeferred() {}
 
 	/*
 		Function: TickPaused
@@ -116,6 +126,12 @@ public: // TODO: Maybe make protected
 	virtual void Snap(int SnappingClient) {}
 
 	/*
+		Function: PostSnap
+			Called after all clients received their snapshot.
+	*/
+	virtual void PostSnap() {}
+
+	/*
 		Function: SwapClients
 			Called when two players have swapped their client ids.
 
@@ -124,6 +140,25 @@ public: // TODO: Maybe make protected
 			Client2 - Second client ID
 	*/
 	virtual void SwapClients(int Client1, int Client2) {}
+
+	/*
+		Function: BlocksSave
+			Called to check if a team can be saved
+
+		Arguments:
+			ClientId - Client ID
+	*/
+	virtual ESaveResult BlocksSave(int ClientId) { return ESaveResult::SUCCESS; }
+
+	/*
+		Function GetOwnerId
+		Returns:
+			ClientId of the initiator from this entity. -1 created by map.
+			This is used by save/load to remove related entities to the tee.
+			CCharacter should not return the PlayerId, because they get
+			handled separately in save/load code.
+	*/
+	virtual int GetOwnerId() const { return -1; }
 
 	/*
 		Function: NetworkClipped
@@ -141,18 +176,21 @@ public: // TODO: Maybe make protected
 	*/
 	bool NetworkClipped(int SnappingClient) const;
 	bool NetworkClipped(int SnappingClient, vec2 CheckPos) const;
+	bool NetworkClippedLine(int SnappingClient, vec2 StartPos, vec2 EndPos) const;
 
 	bool GameLayerClipped(vec2 CheckPos);
+	virtual bool CanCollide(int ClientId) { return true; };
 
 	// DDRace
 
 	bool GetNearestAirPos(vec2 Pos, vec2 PrevPos, vec2 *pOutPos);
-	bool GetNearestAirPosPlayer(vec2 PlayerPos, vec2 *OutPos);
+	bool GetNearestAirPosPlayer(vec2 PlayerPos, vec2 *pOutPos);
 
 	int m_Number;
 	int m_Layer;
 };
 
 bool NetworkClipped(const CGameContext *pGameServer, int SnappingClient, vec2 CheckPos);
+bool NetworkClippedLine(const CGameContext *pGameServer, int SnappingClient, vec2 StartPos, vec2 EndPos);
 
 #endif

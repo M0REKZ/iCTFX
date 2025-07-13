@@ -1,10 +1,13 @@
 #include <gtest/gtest.h>
 
 #include <base/detect.h>
+#include <engine/external/json-parser/json.h>
 #include <engine/server.h>
 #include <engine/shared/config.h>
 #include <game/gamecore.h>
 #include <game/server/teehistorian.h>
+
+#include <vector>
 
 void RegisterGameUuids(CUuidManager *pManager);
 
@@ -17,7 +20,7 @@ protected:
 	CUuidManager m_UuidManager;
 	CTeeHistorian::CGameInfo m_GameInfo;
 
-	CPacker m_Buffer;
+	std::vector<unsigned char> m_vBuffer;
 
 	enum
 	{
@@ -54,7 +57,7 @@ protected:
 
 		m_GameInfo.m_GameUuid = CalculateUuid("test@ddnet.tw");
 		m_GameInfo.m_pServerVersion = "DDNet test";
-		m_GameInfo.m_StartTime = time(0);
+		m_GameInfo.m_StartTime = time(nullptr);
 		m_GameInfo.m_pPrngDescription = "test-prng:02468ace";
 
 		m_GameInfo.m_pServerName = "server name";
@@ -66,6 +69,9 @@ protected:
 		m_GameInfo.m_MapSha256 = Sha256;
 		m_GameInfo.m_MapCrc = 0xeceaf25c;
 
+		m_GameInfo.m_HavePrevGameUuid = false;
+		mem_zero(&m_GameInfo.m_PrevGameUuid, sizeof(m_GameInfo.m_PrevGameUuid));
+
 		m_GameInfo.m_pConfig = &m_Config;
 		m_GameInfo.m_pTuning = &m_Tuning;
 		m_GameInfo.m_pUuids = &m_UuidManager;
@@ -73,59 +79,66 @@ protected:
 		Reset(&m_GameInfo);
 	}
 
+	static void WriteBuffer(std::vector<unsigned char> &vBuffer, const void *pData, size_t DataSize)
+	{
+		if(DataSize <= 0)
+			return;
+
+		const size_t OldSize = vBuffer.size();
+		vBuffer.resize(OldSize + DataSize);
+		mem_copy(&vBuffer[OldSize], pData, DataSize);
+	}
+
 	static void Write(const void *pData, int DataSize, void *pUser)
 	{
 		TeeHistorian *pThis = (TeeHistorian *)pUser;
-		pThis->m_Buffer.AddRaw(pData, DataSize);
+		WriteBuffer(pThis->m_vBuffer, pData, DataSize);
 	}
 
 	void Reset(const CTeeHistorian::CGameInfo *pGameInfo)
 	{
-		m_Buffer.Reset();
+		m_vBuffer.clear();
 		m_TH.Reset(pGameInfo, Write, this);
 		m_State = STATE_NONE;
 	}
 
-	void Expect(const unsigned char *pOutput, int OutputSize)
+	void Expect(const unsigned char *pOutput, size_t OutputSize)
 	{
 		static CUuid TEEHISTORIAN_UUID = CalculateUuid("teehistorian@ddnet.tw");
-		static const char PREFIX1[] = "{\"comment\":\"teehistorian@ddnet.tw\",\"version\":\"2\",\"version_minor\":\"3\",\"game_uuid\":\"a1eb7182-796e-3b3e-941d-38ca71b2a4a8\",\"server_version\":\"DDNet test\",\"start_time\":\"";
+		static const char PREFIX1[] = "{\"comment\":\"teehistorian@ddnet.tw\",\"version\":\"2\",\"version_minor\":\"10\",\"game_uuid\":\"a1eb7182-796e-3b3e-941d-38ca71b2a4a8\",\"server_version\":\"DDNet test\",\"start_time\":\"";
 		static const char PREFIX2[] = "\",\"server_name\":\"server name\",\"server_port\":\"8303\",\"game_type\":\"game type\",\"map_name\":\"Kobra 3 Solo\",\"map_size\":\"903514\",\"map_sha256\":\"0123456789012345678901234567890123456789012345678901234567890123\",\"map_crc\":\"eceaf25c\",\"prng_description\":\"test-prng:02468ace\",\"config\":{},\"tuning\":{},\"uuids\":[";
 		static const char PREFIX3[] = "]}";
 
 		char aTimeBuf[64];
 		str_timestamp_ex(m_GameInfo.m_StartTime, aTimeBuf, sizeof(aTimeBuf), "%Y-%m-%dT%H:%M:%S%z");
 
-		CPacker Buffer;
-		Buffer.Reset();
-		Buffer.AddRaw(&TEEHISTORIAN_UUID, sizeof(TEEHISTORIAN_UUID));
-		Buffer.AddRaw(PREFIX1, str_length(PREFIX1));
-		Buffer.AddRaw(aTimeBuf, str_length(aTimeBuf));
-		Buffer.AddRaw(PREFIX2, str_length(PREFIX2));
+		std::vector<unsigned char> vBuffer;
+		WriteBuffer(vBuffer, &TEEHISTORIAN_UUID, sizeof(TEEHISTORIAN_UUID));
+		WriteBuffer(vBuffer, PREFIX1, str_length(PREFIX1));
+		WriteBuffer(vBuffer, aTimeBuf, str_length(aTimeBuf));
+		WriteBuffer(vBuffer, PREFIX2, str_length(PREFIX2));
 		for(int i = 0; i < m_UuidManager.NumUuids(); i++)
 		{
 			char aBuf[64];
 			str_format(aBuf, sizeof(aBuf), "%s\"%s\"",
 				i == 0 ? "" : ",",
 				m_UuidManager.GetName(OFFSET_UUID + i));
-			Buffer.AddRaw(aBuf, str_length(aBuf));
+			WriteBuffer(vBuffer, aBuf, str_length(aBuf));
 		}
-		Buffer.AddRaw(PREFIX3, str_length(PREFIX3));
-		Buffer.AddRaw("", 1);
-		Buffer.AddRaw(pOutput, OutputSize);
+		WriteBuffer(vBuffer, PREFIX3, str_length(PREFIX3));
+		WriteBuffer(vBuffer, "", 1);
+		WriteBuffer(vBuffer, pOutput, OutputSize);
 
-		ASSERT_FALSE(Buffer.Error());
-
-		ExpectFull(Buffer.Data(), Buffer.Size());
+		ExpectFull(vBuffer.data(), vBuffer.size());
 	}
 
-	void ExpectFull(const unsigned char *pOutput, int OutputSize)
+	void ExpectFull(const unsigned char *pOutput, size_t OutputSize)
 	{
 		const ::testing::TestInfo *pTestInfo =
 			::testing::UnitTest::GetInstance()->current_test_info();
 		const char *pTestName = pTestInfo->name();
 
-		if(m_Buffer.Error() || m_Buffer.Size() != OutputSize || mem_comp(m_Buffer.Data(), pOutput, OutputSize) != 0)
+		if(m_vBuffer.size() != OutputSize || mem_comp(m_vBuffer.data(), pOutput, OutputSize) != 0)
 		{
 			char aFilename[IO_MAX_PATH_LENGTH];
 			IOHANDLE File;
@@ -133,7 +146,7 @@ protected:
 			str_format(aFilename, sizeof(aFilename), "%sGot.teehistorian", pTestName);
 			File = io_open(aFilename, IOFLAG_WRITE);
 			ASSERT_TRUE(File);
-			io_write(File, m_Buffer.Data(), m_Buffer.Size());
+			io_write(File, m_vBuffer.data(), m_vBuffer.size());
 			io_close(File);
 
 			str_format(aFilename, sizeof(aFilename), "%sExpected.teehistorian", pTestName);
@@ -143,9 +156,25 @@ protected:
 			io_close(File);
 		}
 
-		ASSERT_FALSE(m_Buffer.Error());
-		ASSERT_EQ(m_Buffer.Size(), OutputSize);
-		ASSERT_TRUE(mem_comp(m_Buffer.Data(), pOutput, OutputSize) == 0);
+		printf("pOutput = {");
+		size_t Start = 0; // skip over header;
+		for(size_t i = 0; i < m_vBuffer.size(); i++)
+		{
+			if(Start == 0)
+			{
+				if(m_vBuffer[i] == 0)
+					Start = i + 1;
+				continue;
+			}
+			if((i - Start) % 10 == 0)
+				printf("\n\t");
+			else
+				printf(", ");
+			printf("0x%.2x", m_vBuffer[i]);
+		}
+		printf("\n}\n");
+		ASSERT_EQ(m_vBuffer.size(), OutputSize);
+		ASSERT_TRUE(mem_comp(m_vBuffer.data(), pOutput, OutputSize) == 0);
 	}
 
 	void Tick(int Tick)
@@ -182,17 +211,17 @@ protected:
 		}
 		m_TH.Finish();
 	}
-	void DeadPlayer(int ClientID)
+	void DeadPlayer(int ClientId)
 	{
-		m_TH.RecordDeadPlayer(ClientID);
+		m_TH.RecordDeadPlayer(ClientId);
 	}
-	void Player(int ClientID, int x, int y)
+	void Player(int ClientId, int x, int y)
 	{
 		CNetObj_CharacterCore Char;
 		mem_zero(&Char, sizeof(Char));
 		Char.m_X = x;
 		Char.m_Y = y;
-		m_TH.RecordPlayer(ClientID, &Char);
+		m_TH.RecordPlayer(ClientId, &Char);
 	}
 };
 
@@ -235,7 +264,7 @@ TEST_F(TeeHistorian, TickImplicitTwoTicks)
 	Expect(EXPECTED, sizeof(EXPECTED));
 }
 
-TEST_F(TeeHistorian, TickImplicitDescendingClientID)
+TEST_F(TeeHistorian, TickImplicitDescendingClientId)
 {
 	const unsigned char EXPECTED[] = {
 		0x42, 0x01, 0x02, 0x03, // PLAYER_NEW cid=1 x=2 y=3
@@ -252,7 +281,7 @@ TEST_F(TeeHistorian, TickImplicitDescendingClientID)
 	Expect(EXPECTED, sizeof(EXPECTED));
 }
 
-TEST_F(TeeHistorian, TickExplicitAscendingClientID)
+TEST_F(TeeHistorian, TickExplicitAscendingClientId)
 {
 	const unsigned char EXPECTED[] = {
 		0x42, 0x00, 0x04, 0x05, // PLAYER_NEW cid=0 x=4 y=5
@@ -359,10 +388,10 @@ TEST_F(TeeHistorian, DDNetVersion)
 		0x01, 0x92, 0xcb, 0x01,
 		0x40, // FINISH
 	};
-	CUuid ConnectionID = {
+	CUuid ConnectionId = {
 		0xfb, 0x13, 0xa5, 0x76, 0xd3, 0x5f, 0x48, 0x93,
 		0xb8, 0x15, 0xee, 0xdc, 0x6d, 0x98, 0x01, 0x5b};
-	m_TH.RecordDDNetVersion(0, ConnectionID, 13010, "DDNet 13.1 (3623f5e4cd184556)");
+	m_TH.RecordDDNetVersion(0, ConnectionId, 13010, "DDNet 13.1 (3623f5e4cd184556)");
 	m_TH.RecordDDNetVersionOld(1, 13010);
 	Finish();
 	Expect(EXPECTED, sizeof(EXPECTED));
@@ -445,6 +474,47 @@ TEST_F(TeeHistorian, JoinLeave)
 	Expect(EXPECTED, sizeof(EXPECTED));
 }
 
+TEST_F(TeeHistorian, Input)
+{
+	CNetObj_PlayerInput Input = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+	const unsigned char EXPECTED[] = {
+		// TICK_SKIP dt=0
+		0x41, 0x00,
+		// new player -> InputNew
+		0x45,
+		0x00, // ClientId 0
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+		// same unique id, same input -> nothing
+		// same unique id, different input -> InputDiff
+		0x44,
+		0x00, // ClientId 0
+		0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		// different unique id, same input -> InputNew
+		0x45,
+		0x00, // ClientId 0
+		0x00, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+		// FINISH
+		0x40};
+
+	Tick(1);
+
+	// new player -> InputNew
+	m_TH.RecordPlayerInput(0, 1, &Input);
+	// same unique id, same input -> nothing
+	m_TH.RecordPlayerInput(0, 1, &Input);
+
+	Input.m_Direction = 0;
+
+	// same unique id, different input -> InputDiff
+	m_TH.RecordPlayerInput(0, 1, &Input);
+
+	// different unique id, same input -> InputNew
+	m_TH.RecordPlayerInput(0, 2, &Input);
+
+	Finish();
+	Expect(EXPECTED, sizeof(EXPECTED));
+}
+
 TEST_F(TeeHistorian, SaveSuccess)
 {
 	const unsigned char EXPECTED[] = {
@@ -463,11 +533,11 @@ TEST_F(TeeHistorian, SaveSuccess)
 		// FINISH
 		0x40};
 
-	CUuid SaveID = {
+	CUuid SaveId = {
 		0xfb, 0x13, 0xa5, 0x76, 0xd3, 0x5f, 0x48, 0x93,
 		0xb8, 0x15, 0xee, 0xdc, 0x6d, 0x98, 0x01, 0x5b};
 	const char *pTeamSave = "2\tH.\nll0";
-	m_TH.RecordTeamSaveSuccess(21, SaveID, pTeamSave);
+	m_TH.RecordTeamSaveSuccess(21, SaveId, pTeamSave);
 	Finish();
 	Expect(EXPECTED, sizeof(EXPECTED));
 }
@@ -507,11 +577,11 @@ TEST_F(TeeHistorian, LoadSuccess)
 		// FINISH
 		0x40};
 
-	CUuid SaveID = {
+	CUuid SaveId = {
 		0xfb, 0x13, 0xa5, 0x76, 0xd3, 0x5f, 0x48, 0x93,
 		0xb8, 0x15, 0xee, 0xdc, 0x6d, 0x98, 0x01, 0x5b};
 	const char *pTeamSave = "2\tH.\nll0";
-	m_TH.RecordTeamLoadSuccess(21, SaveID, pTeamSave);
+	m_TH.RecordTeamLoadSuccess(21, SaveId, pTeamSave);
 	Finish();
 	Expect(EXPECTED, sizeof(EXPECTED));
 }
@@ -530,6 +600,29 @@ TEST_F(TeeHistorian, LoadFailed)
 
 	m_TH.RecordTeamLoadFailure(12);
 	Finish();
+	Expect(EXPECTED, sizeof(EXPECTED));
+}
+
+TEST_F(TeeHistorian, PlayerSwap)
+{
+	const unsigned char EXPECTED[] = {
+		// TICK_SKIP dt=0
+		0x41, 0x00,
+		// EX uuid=5de9b633-49cf-3e99-9a25-d4a78e9717d7 datalen=2
+		0x4a,
+		0x5d, 0xe9, 0xb6, 0x33, 0x49, 0xcf, 0x3e, 0x99,
+		0x9a, 0x25, 0xd4, 0xa7, 0x8e, 0x97, 0x17, 0xd7,
+		0x02,
+		// playerId1=11
+		0x0b,
+		// playerId2=21
+		0x15,
+		// FINISH
+		0x40};
+	Tick(1);
+	m_TH.RecordPlayerSwap(11, 21);
+	Finish();
+
 	Expect(EXPECTED, sizeof(EXPECTED));
 }
 
@@ -608,13 +701,31 @@ TEST_F(TeeHistorian, TeamPractice)
 		0x40};
 
 	Tick(1);
-	m_TH.RecordTeamPractice(1, 0);
-	m_TH.RecordTeamPractice(16, 0);
-	m_TH.RecordTeamPractice(23, 1);
+	m_TH.RecordTeamPractice(1, false);
+	m_TH.RecordTeamPractice(16, false);
+	m_TH.RecordTeamPractice(23, true);
 	Tick(2);
-	m_TH.RecordTeamPractice(1, 1);
-	m_TH.RecordTeamPractice(16, 0);
-	m_TH.RecordTeamPractice(23, 0);
+	m_TH.RecordTeamPractice(1, true);
+	m_TH.RecordTeamPractice(16, false);
+	m_TH.RecordTeamPractice(23, false);
+	Finish();
+	Expect(EXPECTED, sizeof(EXPECTED));
+}
+
+TEST_F(TeeHistorian, PlayerRejoinVer6)
+{
+	const unsigned char EXPECTED[] = {
+		// EX uuid=c1e921d5-96f5-37bb-8a45-7a06f163d27e datalen=1
+		0x4a,
+		0xc1, 0xe9, 0x21, 0xd5, 0x96, 0xf5, 0x37, 0xbb,
+		0x8a, 0x45, 0x7a, 0x06, 0xf1, 0x63, 0xd2, 0x7e,
+		0x01,
+		// (PLAYER_REJOIN) cid=2
+		0x02,
+		// FINISH
+		0x40};
+
+	m_TH.RecordPlayerRejoin(2);
 	Finish();
 	Expect(EXPECTED, sizeof(EXPECTED));
 }
@@ -627,7 +738,7 @@ TEST_F(TeeHistorian, PlayerReady)
 		0x63, 0x85, 0x87, 0xc9, 0x3f, 0x75, 0x38, 0x87,
 		0x91, 0x8e, 0xa3, 0xc2, 0x61, 0x4f, 0xfa, 0xa0,
 		0x01,
-		// (PLAYER_READY) cid=1
+		// (PLAYER_READY) cid=63
 		0x3f,
 		// FINISH
 		0x40};
@@ -674,4 +785,122 @@ TEST_F(TeeHistorian, PlayerReadyMultiple)
 	m_TH.RecordPlayerReady(63);
 	Finish();
 	Expect(EXPECTED, sizeof(EXPECTED));
+}
+
+TEST_F(TeeHistorian, AntibotEmpty)
+{
+	const unsigned char EXPECTED[] = {
+		// EX uuid=866bfdac-fb49-3c0b-a887-5fe1f3ea00b8 datalen=0
+		0x4a,
+		0x86, 0x6b, 0xfd, 0xac, 0xfb, 0x49, 0x3c, 0x0b,
+		0xa8, 0x87, 0x5f, 0xe1, 0xf3, 0xea, 0x00, 0xb8,
+		0x00,
+		// (ANTIBOT) antibot_data
+	};
+
+	m_TH.RecordAntibot("", 0);
+	Expect(EXPECTED, sizeof(EXPECTED));
+}
+
+TEST_F(TeeHistorian, AntibotEmptyNulBytes)
+{
+	const unsigned char EXPECTED[] = {
+		// EX uuid=866bfdac-fb49-3c0b-a887-5fe1f3ea00b8 datalen=4
+		0x4a,
+		0x86, 0x6b, 0xfd, 0xac, 0xfb, 0x49, 0x3c, 0x0b,
+		0xa8, 0x87, 0x5f, 0xe1, 0xf3, 0xea, 0x00, 0xb8,
+		0x04,
+		// (ANTIBOT) antibot_data
+		0x00,
+		0x00,
+		0x00,
+		0x00};
+
+	m_TH.RecordAntibot("\0\0\0\0", 4);
+	Expect(EXPECTED, sizeof(EXPECTED));
+}
+
+TEST_F(TeeHistorian, AntibotEmptyMessage)
+{
+	const unsigned char EXPECTED[] = {
+		// EX uuid=866bfdac-fb49-3c0b-a887-5fe1f3ea00b8 datalen=4
+		0x4a,
+		0x86, 0x6b, 0xfd, 0xac, 0xfb, 0x49, 0x3c, 0x0b,
+		0xa8, 0x87, 0x5f, 0xe1, 0xf3, 0xea, 0x00, 0xb8,
+		0x04,
+		// (ANTIBOT) antibot_data
+		0xf0,
+		0x9f,
+		0xa4,
+		0x96};
+
+	m_TH.RecordAntibot("🤖", 4);
+	Expect(EXPECTED, sizeof(EXPECTED));
+}
+
+TEST_F(TeeHistorian, PlayerName)
+{
+	const unsigned char EXPECTED[] = {
+		// EX uuid=d016f9b9-4151-3b87-87e5-3a6087eb5f26 datalen=14
+		0x4a,
+		0xd0, 0x16, 0xf9, 0xb9, 0x41, 0x51, 0x3b, 0x87,
+		0x87, 0xe5, 0x3a, 0x60, 0x87, 0xeb, 0x5f, 0x26,
+		0x0e,
+		// (PLAYER_NAME) id=21 name="nameless tee"
+		0x15,
+		0x6e, 0x61, 0x6d, 0x65, 0x6c, 0x65, 0x73, 0x73,
+		0x20, 0x74, 0x65, 0x65, 0x00};
+
+	m_TH.RecordPlayerName(21, "nameless tee");
+	Expect(EXPECTED, sizeof(EXPECTED));
+}
+
+TEST_F(TeeHistorian, PlayerFinish)
+{
+	const unsigned char EXPECTED[] = {
+		// EX uuid=68943c01-2348-3e01-9490-3f27f8269d94 datalen=4
+		0x4a,
+		0x68, 0x94, 0x3c, 0x01, 0x23, 0x48, 0x3e, 0x01,
+		0x94, 0x90, 0x3f, 0x27, 0xf8, 0x26, 0x9d, 0x94,
+		0x04,
+		// (PLAYER_FINISH) id=1 time=1000000
+		0x01, 0x80, 0x89, 0x7a};
+
+	m_TH.RecordPlayerFinish(1, 1000000);
+	Expect(EXPECTED, sizeof(EXPECTED));
+}
+
+TEST_F(TeeHistorian, TeamFinish)
+{
+	const unsigned char EXPECTED[] = {
+		// EX uuid=9588b9af-3fdc-3760-8043-82deeee317a5 datalen=3
+		0x4a,
+		0x95, 0x88, 0xb9, 0xaf, 0x3f, 0xdc, 0x37, 0x60,
+		0x80, 0x43, 0x82, 0xde, 0xee, 0xe3, 0x17, 0xa5,
+		0x03,
+		// (TEAM_FINISH) team=63 Time=1000
+		0x3f, 0xa8, 0x0f};
+
+	m_TH.RecordTeamFinish(63, 1000);
+	Expect(EXPECTED, sizeof(EXPECTED));
+}
+
+TEST_F(TeeHistorian, PrevGameUuid)
+{
+	m_GameInfo.m_HavePrevGameUuid = true;
+	CUuid PrevGameUuid = {{
+		// fe19c218-f555-4002-a273-126c59ccc17a
+		0xfe, 0x19, 0xc2, 0x18, 0xf5, 0x55, 0x40, 0x02,
+		0xa2, 0x73, 0x12, 0x6c, 0x59, 0xcc, 0xc1, 0x7a,
+		//
+	}};
+	m_GameInfo.m_PrevGameUuid = PrevGameUuid;
+	Reset(&m_GameInfo);
+	Finish();
+	json_value *pJson = json_parse((const char *)m_vBuffer.data() + 16, -1);
+	ASSERT_TRUE(pJson);
+	const json_value &JsonPrevGameUuid = (*pJson)["prev_game_uuid"];
+	ASSERT_EQ(JsonPrevGameUuid.type, json_string);
+	EXPECT_STREQ(JsonPrevGameUuid, "fe19c218-f555-4002-a273-126c59ccc17a");
+	json_value_free(pJson);
 }

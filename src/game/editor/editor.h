@@ -3,35 +3,57 @@
 #ifndef GAME_EDITOR_EDITOR_H
 #define GAME_EDITOR_EDITOR_H
 
-#include <math.h>
-#include <string>
-#include <vector>
-
-#include <base/math.h>
+#include <base/bezier.h>
 #include <base/system.h>
-
-#include <base/tl/algorithm.h>
-#include <base/tl/array.h>
-#include <base/tl/sorted_array.h>
-#include <base/tl/string.h>
 
 #include <game/client/render.h>
 #include <game/client/ui.h>
-#include <game/client/ui_ex.h>
+#include <game/client/ui_listbox.h>
 #include <game/mapitems.h>
 
+#include <game/editor/enums.h>
+#include <game/editor/mapitems/envelope.h>
+#include <game/editor/mapitems/layer.h>
+#include <game/editor/mapitems/layer_front.h>
+#include <game/editor/mapitems/layer_game.h>
+#include <game/editor/mapitems/layer_group.h>
+#include <game/editor/mapitems/layer_quads.h>
+#include <game/editor/mapitems/layer_sounds.h>
+#include <game/editor/mapitems/layer_speedup.h>
+#include <game/editor/mapitems/layer_switch.h>
+#include <game/editor/mapitems/layer_tele.h>
+#include <game/editor/mapitems/layer_tiles.h>
+#include <game/editor/mapitems/layer_tune.h>
+
+#include <engine/console.h>
 #include <engine/editor.h>
+#include <engine/engine.h>
 #include <engine/graphics.h>
-#include <engine/shared/config.h>
 #include <engine/shared/datafile.h>
-#include <engine/sound.h>
-#include <engine/storage.h>
+#include <engine/shared/jobs.h>
 
-#include "auto_map.h"
+#include "editor_history.h"
+#include "editor_server_settings.h"
+#include "editor_trackers.h"
+#include "editor_ui.h"
+#include "font_typer.h"
+#include "layer_selector.h"
+#include "map_view.h"
+#include "quadart.h"
+#include "smooth_value.h"
+#include <game/editor/prompt.h>
+#include <game/editor/quick_action.h>
 
-typedef void (*INDEX_MODIFY_FUNC)(int *pIndex);
+#include <deque>
+#include <functional>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
 
-//CRenderTools m_RenderTools;
+typedef std::function<void(int *pIndex)> FIndexModifyFunction;
+template<typename T>
+using FDropdownRenderCallback = std::function<void(const T &, char (&aOutput)[128], std::vector<STextColorSplit> &)>;
 
 // CEditor SPECIFIC
 enum
@@ -39,303 +61,29 @@ enum
 	MODE_LAYERS = 0,
 	MODE_IMAGES,
 	MODE_SOUNDS,
+	NUM_MODES,
 
 	DIALOG_NONE = 0,
 	DIALOG_FILE,
+	DIALOG_MAPSETTINGS_ERROR,
+	DIALOG_QUICK_PROMPT,
+
+	// The font typer component sets m_Dialog
+	// while it is active to make sure no other component
+	// interprets the key presses
+	DIALOG_PSEUDO_FONT_TYPER,
 };
 
-class CEnvelope
-{
-public:
-	int m_Channels;
-	array<CEnvPoint> m_lPoints;
-	char m_aName[32];
-	float m_Bottom, m_Top;
-	bool m_Synchronized;
-
-	CEnvelope(int Chan)
-	{
-		m_Channels = Chan;
-		m_aName[0] = 0;
-		m_Bottom = 0;
-		m_Top = 0;
-		m_Synchronized = false;
-	}
-
-	void Resort()
-	{
-		sort(m_lPoints.all());
-		FindTopBottom(0xf);
-	}
-
-	void FindTopBottom(int ChannelMask)
-	{
-		m_Top = -1000000000.0f;
-		m_Bottom = 1000000000.0f;
-		for(int i = 0; i < m_lPoints.size(); i++)
-		{
-			for(int c = 0; c < m_Channels; c++)
-			{
-				if(ChannelMask & (1 << c))
-				{
-					float v = fx2f(m_lPoints[i].m_aValues[c]);
-					if(v > m_Top)
-						m_Top = v;
-					if(v < m_Bottom)
-						m_Bottom = v;
-				}
-			}
-		}
-	}
-
-	int Eval(float Time, float *pResult)
-	{
-		CRenderTools::RenderEvalEnvelope(m_lPoints.base_ptr(), m_lPoints.size(), m_Channels, (int64_t)((double)Time * 1000000.0), pResult);
-		return m_Channels;
-	}
-
-	void AddPoint(int Time, int v0, int v1 = 0, int v2 = 0, int v3 = 0)
-	{
-		CEnvPoint p;
-		p.m_Time = Time;
-		p.m_aValues[0] = v0;
-		p.m_aValues[1] = v1;
-		p.m_aValues[2] = v2;
-		p.m_aValues[3] = v3;
-		p.m_Curvetype = CURVETYPE_LINEAR;
-		m_lPoints.add(p);
-		Resort();
-	}
-
-	float EndTime() const
-	{
-		if(m_lPoints.size())
-			return m_lPoints[m_lPoints.size() - 1].m_Time * (1.0f / 1000.0f);
-		return 0;
-	}
-};
-
-class CLayer;
-class CLayerGroup;
-class CEditorMap;
-
-class CLayer
-{
-public:
-	class CEditor *m_pEditor;
-	class IGraphics *Graphics();
-	class ITextRender *TextRender();
-
-	CLayer()
-	{
-		m_Type = LAYERTYPE_INVALID;
-		str_copy(m_aName, "(invalid)", sizeof(m_aName));
-		m_Visible = true;
-		m_Readonly = false;
-		m_Flags = 0;
-		m_pEditor = 0;
-		m_BrushRefCount = 0;
-	}
-
-	virtual ~CLayer()
-	{
-	}
-
-	virtual void BrushSelecting(CUIRect Rect) {}
-	virtual int BrushGrab(CLayerGroup *pBrush, CUIRect Rect) { return 0; }
-	virtual void FillSelection(bool Empty, CLayer *pBrush, CUIRect Rect) {}
-	virtual void BrushDraw(CLayer *pBrush, float x, float y) {}
-	virtual void BrushPlace(CLayer *pBrush, float x, float y) {}
-	virtual void BrushFlipX() {}
-	virtual void BrushFlipY() {}
-	virtual void BrushRotate(float Amount) {}
-
-	virtual void Render(bool Tileset = false) {}
-	virtual int RenderProperties(CUIRect *pToolbox) { return 0; }
-
-	virtual void ModifyImageIndex(INDEX_MODIFY_FUNC pfnFunc) {}
-	virtual void ModifyEnvelopeIndex(INDEX_MODIFY_FUNC pfnFunc) {}
-	virtual void ModifySoundIndex(INDEX_MODIFY_FUNC pfnFunc) {}
-
-	virtual void GetSize(float *w, float *h)
-	{
-		*w = 0;
-		*h = 0;
-	}
-
-	char m_aName[12];
-	int m_Type;
-	int m_Flags;
-
-	bool m_Readonly;
-	bool m_Visible;
-
-	int m_BrushRefCount;
-};
-
-class CLayerGroup
-{
-public:
-	class CEditorMap *m_pMap;
-
-	array<CLayer *> m_lLayers;
-
-	int m_OffsetX;
-	int m_OffsetY;
-
-	int m_ParallaxX;
-	int m_ParallaxY;
-
-	int m_UseClipping;
-	int m_ClipX;
-	int m_ClipY;
-	int m_ClipW;
-	int m_ClipH;
-
-	char m_aName[12];
-	bool m_GameGroup;
-	bool m_Visible;
-	bool m_Collapse;
-
-	CLayerGroup();
-	~CLayerGroup();
-
-	void Convert(CUIRect *pRect);
-	void Render();
-	void MapScreen();
-	void Mapping(float *pPoints);
-
-	void GetSize(float *w, float *h) const;
-
-	void DeleteLayer(int Index);
-	int SwapLayers(int Index0, int Index1);
-
-	bool IsEmpty() const
-	{
-		return m_lLayers.size() == 0; // stupid function, since its bad for Fillselection: TODO add a function for Fillselection that returns whether a specific tile is used in the given layer
-	}
-
-	/*bool IsUsedInThisLayer(int Layer, int Index) // <--------- this is what i meant but cause i don't know which Indexes belongs to which layers i can't finish yet
-	{
-		switch Layer
-		{
-			case LAYERTYPE_GAME: // security
-				return true;
-			case LAYERTYPE_FRONT:
-				return true;
-			case LAYERTYPE_TELE:
-			{
-				if (Index ==) // you could add an 2D array into mapitems.h which defines which Indexes belong to which layer(s)
-			}
-			case LAYERTYPE_SPEEDUP:
-			{
-				if (Index == TILE_BOOST)
-					return true;
-				else
-					return false;
-			}
-			case LAYERTYPE_SWITCH:
-			{
-
-			}
-			case LAYERTYPE_TUNE:
-			{
-				if (Index == TILE_TUNE)
-					return true;
-				else
-					return false;
-			}
-			default:
-				return false;
-		}
-	}*/
-
-	void Clear()
-	{
-		m_lLayers.clear();
-	}
-
-	void AddLayer(CLayer *l);
-
-	void ModifyImageIndex(INDEX_MODIFY_FUNC Func)
-	{
-		for(int i = 0; i < m_lLayers.size(); i++)
-			m_lLayers[i]->ModifyImageIndex(Func);
-	}
-
-	void ModifyEnvelopeIndex(INDEX_MODIFY_FUNC Func)
-	{
-		for(int i = 0; i < m_lLayers.size(); i++)
-			m_lLayers[i]->ModifyEnvelopeIndex(Func);
-	}
-
-	void ModifySoundIndex(INDEX_MODIFY_FUNC Func)
-	{
-		for(int i = 0; i < m_lLayers.size(); i++)
-			m_lLayers[i]->ModifySoundIndex(Func);
-	}
-};
-
-class CEditorImage : public CImageInfo
-{
-public:
-	CEditor *m_pEditor;
-
-	CEditorImage(CEditor *pEditor) :
-		m_AutoMapper(pEditor)
-	{
-		m_pEditor = pEditor;
-		m_aName[0] = 0;
-		m_External = 0;
-		m_Width = 0;
-		m_Height = 0;
-		m_pData = 0;
-		m_Format = 0;
-	}
-
-	~CEditorImage();
-
-	void AnalyseTileFlags();
-
-	IGraphics::CTextureHandle m_Texture;
-	int m_External;
-	char m_aName[128];
-	unsigned char m_aTileFlags[256];
-	class CAutoMapper m_AutoMapper;
-};
-
-class CEditorSound
-{
-public:
-	CEditor *m_pEditor;
-
-	CEditorSound(CEditor *pEditor)
-	{
-		m_pEditor = pEditor;
-		m_aName[0] = 0;
-		m_SoundID = 0;
-
-		m_pData = 0x0;
-		m_DataSize = 0;
-	}
-
-	~CEditorSound();
-
-	int m_SoundID;
-	char m_aName[128];
-
-	void *m_pData;
-	unsigned m_DataSize;
-};
+class CEditorImage;
+class CEditorSound;
 
 class CEditorMap
 {
-	void MakeGameGroup(CLayerGroup *pGroup);
-	void MakeGameLayer(CLayer *pLayer);
+	void MakeGameGroup(std::shared_ptr<CLayerGroup> pGroup);
+	void MakeGameLayer(const std::shared_ptr<CLayer> &pLayer);
 
 public:
 	CEditor *m_pEditor;
-	bool m_Modified;
 
 	CEditorMap()
 	{
@@ -347,19 +95,21 @@ public:
 		Clean();
 	}
 
-	array<CLayerGroup *> m_lGroups;
-	array<CEditorImage *> m_lImages;
-	array<CEnvelope *> m_lEnvelopes;
-	array<CEditorSound *> m_lSounds;
+	bool m_Modified; // unsaved changes in manual save
+	bool m_ModifiedAuto; // unsaved changes in autosave
+	float m_LastModifiedTime;
+	float m_LastSaveTime;
+	float m_LastAutosaveUpdateTime;
+	void OnModify();
+
+	std::vector<std::shared_ptr<CLayerGroup>> m_vpGroups;
+	std::vector<std::shared_ptr<CEditorImage>> m_vpImages;
+	std::vector<std::shared_ptr<CEnvelope>> m_vpEnvelopes;
+	std::vector<std::shared_ptr<CEditorSound>> m_vpSounds;
 
 	class CMapInfo
 	{
 	public:
-		char m_aAuthorTmp[32];
-		char m_aVersionTmp[16];
-		char m_aCreditsTmp[128];
-		char m_aLicenseTmp[32];
-
 		char m_aAuthor[32];
 		char m_aVersion[16];
 		char m_aCredits[128];
@@ -367,113 +117,124 @@ public:
 
 		void Reset()
 		{
-			m_aAuthorTmp[0] = 0;
-			m_aVersionTmp[0] = 0;
-			m_aCreditsTmp[0] = 0;
-			m_aLicenseTmp[0] = 0;
+			m_aAuthor[0] = '\0';
+			m_aVersion[0] = '\0';
+			m_aCredits[0] = '\0';
+			m_aLicense[0] = '\0';
+		}
 
-			m_aAuthor[0] = 0;
-			m_aVersion[0] = 0;
-			m_aCredits[0] = 0;
-			m_aLicense[0] = 0;
+		void Copy(const CMapInfo &Source)
+		{
+			str_copy(m_aAuthor, Source.m_aAuthor);
+			str_copy(m_aVersion, Source.m_aVersion);
+			str_copy(m_aCredits, Source.m_aCredits);
+			str_copy(m_aLicense, Source.m_aLicense);
 		}
 	};
 	CMapInfo m_MapInfo;
+	CMapInfo m_MapInfoTmp;
 
-	struct CSetting
+	std::vector<CEditorMapSetting> m_vSettings;
+
+	std::shared_ptr<class CLayerGame> m_pGameLayer;
+	std::shared_ptr<CLayerGroup> m_pGameGroup;
+
+	std::shared_ptr<CEnvelope> NewEnvelope(CEnvelope::EType Type)
 	{
-		char m_aCommand[256];
-	};
-	array<CSetting> m_lSettings;
-
-	class CLayerGame *m_pGameLayer;
-	CLayerGroup *m_pGameGroup;
-
-	CEnvelope *NewEnvelope(int Channels)
-	{
-		m_Modified = true;
-		CEnvelope *e = new CEnvelope(Channels);
-		m_lEnvelopes.add(e);
-		return e;
+		OnModify();
+		std::shared_ptr<CEnvelope> pEnv = std::make_shared<CEnvelope>(Type);
+		m_vpEnvelopes.push_back(pEnv);
+		return pEnv;
 	}
 
 	void DeleteEnvelope(int Index);
+	void SwapEnvelopes(int Index0, int Index1);
+	template<typename F>
+	void VisitEnvelopeReferences(F &&Visitor);
 
-	CLayerGroup *NewGroup()
+	std::shared_ptr<CLayerGroup> NewGroup()
 	{
-		m_Modified = true;
-		CLayerGroup *g = new CLayerGroup;
-		g->m_pMap = this;
-		m_lGroups.add(g);
-		return g;
+		OnModify();
+		std::shared_ptr<CLayerGroup> pGroup = std::make_shared<CLayerGroup>();
+		pGroup->m_pMap = this;
+		m_vpGroups.push_back(pGroup);
+		return pGroup;
 	}
 
 	int SwapGroups(int Index0, int Index1)
 	{
-		if(Index0 < 0 || Index0 >= m_lGroups.size())
+		if(Index0 < 0 || Index0 >= (int)m_vpGroups.size())
 			return Index0;
-		if(Index1 < 0 || Index1 >= m_lGroups.size())
+		if(Index1 < 0 || Index1 >= (int)m_vpGroups.size())
 			return Index0;
 		if(Index0 == Index1)
 			return Index0;
-		m_Modified = true;
-		swap(m_lGroups[Index0], m_lGroups[Index1]);
+		OnModify();
+		std::swap(m_vpGroups[Index0], m_vpGroups[Index1]);
 		return Index1;
 	}
 
 	void DeleteGroup(int Index)
 	{
-		if(Index < 0 || Index >= m_lGroups.size())
+		if(Index < 0 || Index >= (int)m_vpGroups.size())
 			return;
-		m_Modified = true;
-		delete m_lGroups[Index];
-		m_lGroups.remove_index(Index);
+		OnModify();
+		m_vpGroups.erase(m_vpGroups.begin() + Index);
 	}
 
-	void ModifyImageIndex(INDEX_MODIFY_FUNC pfnFunc)
+	void ModifyImageIndex(FIndexModifyFunction pfnFunc)
 	{
-		m_Modified = true;
-		for(int i = 0; i < m_lGroups.size(); i++)
-			m_lGroups[i]->ModifyImageIndex(pfnFunc);
+		OnModify();
+		for(auto &pGroup : m_vpGroups)
+			pGroup->ModifyImageIndex(pfnFunc);
 	}
 
-	void ModifyEnvelopeIndex(INDEX_MODIFY_FUNC pfnFunc)
+	void ModifyEnvelopeIndex(FIndexModifyFunction pfnFunc)
 	{
-		m_Modified = true;
-		for(int i = 0; i < m_lGroups.size(); i++)
-			m_lGroups[i]->ModifyEnvelopeIndex(pfnFunc);
+		OnModify();
+		for(auto &pGroup : m_vpGroups)
+			pGroup->ModifyEnvelopeIndex(pfnFunc);
 	}
 
-	void ModifySoundIndex(INDEX_MODIFY_FUNC pfnFunc)
+	void ModifySoundIndex(FIndexModifyFunction pfnFunc)
 	{
-		m_Modified = true;
-		for(int i = 0; i < m_lGroups.size(); i++)
-			m_lGroups[i]->ModifySoundIndex(pfnFunc);
+		OnModify();
+		for(auto &pGroup : m_vpGroups)
+			pGroup->ModifySoundIndex(pfnFunc);
 	}
 
 	void Clean();
 	void CreateDefault(IGraphics::CTextureHandle EntitiesTexture);
 
 	// io
-	int Save(class IStorage *pStorage, const char *pFilename);
-	int Load(class IStorage *pStorage, const char *pFilename, int StorageType);
+	bool Save(const char *pFilename, const std::function<void(const char *pErrorMessage)> &ErrorHandler);
+	bool PerformPreSaveSanityChecks(const std::function<void(const char *pErrorMessage)> &ErrorHandler);
+	bool Load(const char *pFilename, int StorageType, const std::function<void(const char *pErrorMessage)> &ErrorHandler);
+	void PerformSanityChecks(const std::function<void(const char *pErrorMessage)> &ErrorHandler);
 
 	// DDRace
 
-	class CLayerTele *m_pTeleLayer;
-	class CLayerSpeedup *m_pSpeedupLayer;
-	class CLayerFront *m_pFrontLayer;
-	class CLayerSwitch *m_pSwitchLayer;
-	class CLayerTune *m_pTuneLayer;
-	void MakeTeleLayer(CLayer *pLayer);
-	void MakeSpeedupLayer(CLayer *pLayer);
-	void MakeFrontLayer(CLayer *pLayer);
-	void MakeSwitchLayer(CLayer *pLayer);
-	void MakeTuneLayer(CLayer *pLayer);
+	std::shared_ptr<class CLayerTele> m_pTeleLayer;
+	std::shared_ptr<class CLayerSpeedup> m_pSpeedupLayer;
+	std::shared_ptr<class CLayerFront> m_pFrontLayer;
+	std::shared_ptr<class CLayerSwitch> m_pSwitchLayer;
+	std::shared_ptr<class CLayerTune> m_pTuneLayer;
+	void MakeTeleLayer(const std::shared_ptr<CLayer> &pLayer);
+	void MakeSpeedupLayer(const std::shared_ptr<CLayer> &pLayer);
+	void MakeFrontLayer(const std::shared_ptr<CLayer> &pLayer);
+	void MakeSwitchLayer(const std::shared_ptr<CLayer> &pLayer);
+	void MakeTuneLayer(const std::shared_ptr<CLayer> &pLayer);
 };
 
-struct CProperty
+class CProperty
 {
+public:
+	CProperty(const char *pName, int Value, int Type, int Min, int Max) :
+		m_pName(pName), m_Value(Value), m_Type(Type), m_Min(Min), m_Max(Max) {}
+
+	CProperty(std::nullptr_t) :
+		m_pName(nullptr), m_Value(0), m_Type(0), m_Min(0), m_Max(0) {}
+
 	const char *m_pName;
 	int m_Value;
 	int m_Type;
@@ -485,8 +246,7 @@ enum
 {
 	PROPTYPE_NULL = 0,
 	PROPTYPE_BOOL,
-	PROPTYPE_INT_STEP,
-	PROPTYPE_INT_SCROLL,
+	PROPTYPE_INT,
 	PROPTYPE_ANGLE_SCROLL,
 	PROPTYPE_COLOR,
 	PROPTYPE_IMAGE,
@@ -494,152 +254,52 @@ enum
 	PROPTYPE_SHIFT,
 	PROPTYPE_SOUND,
 	PROPTYPE_AUTOMAPPER,
+	PROPTYPE_AUTOMAPPER_REFERENCE,
 };
 
-enum
+class CDataFileWriterFinishJob : public IJob
 {
-	DIRECTION_LEFT = 1,
-	DIRECTION_RIGHT = 2,
-	DIRECTION_UP = 4,
-	DIRECTION_DOWN = 8,
-};
+	char m_aRealFileName[IO_MAX_PATH_LENGTH];
+	char m_aTempFileName[IO_MAX_PATH_LENGTH];
+	CDataFileWriter m_Writer;
 
-typedef struct
-{
-	int x, y;
-	int w, h;
-} RECTi;
-
-class CLayerTiles : public CLayer
-{
-public:
-	CLayerTiles(int w, int h);
-	~CLayerTiles();
-
-	virtual CTile GetTile(int x, int y);
-	virtual void SetTile(int x, int y, CTile tile);
-
-	virtual void Resize(int NewW, int NewH);
-	virtual void Shift(int Direction);
-
-	void MakePalette();
-	virtual void Render(bool Tileset = false);
-
-	int ConvertX(float x) const;
-	int ConvertY(float y) const;
-	void Convert(CUIRect Rect, RECTi *pOut);
-	void Snap(CUIRect *pRect);
-	void Clamp(RECTi *pRect);
-
-	virtual bool IsEmpty(CLayerTiles *pLayer);
-	virtual void BrushSelecting(CUIRect Rect);
-	virtual int BrushGrab(CLayerGroup *pBrush, CUIRect Rect);
-	virtual void FillSelection(bool Empty, CLayer *pBrush, CUIRect Rect);
-	virtual void BrushDraw(CLayer *pBrush, float wx, float wy);
-	virtual void BrushFlipX();
-	virtual void BrushFlipY();
-	virtual void BrushRotate(float Amount);
-
-	virtual void ShowInfo();
-	virtual int RenderProperties(CUIRect *pToolbox);
-
-	struct SCommonPropState
+	void Run() override
 	{
-		bool Modified = false;
-		int Width = -1;
-		int Height = -1;
-		int Color = 0;
-	};
-	static int RenderCommonProperties(SCommonPropState &State, CEditor *pEditor, CUIRect *pToolbox, array<CLayerTiles *> &pLayers);
-
-	virtual void ModifyImageIndex(INDEX_MODIFY_FUNC pfnFunc);
-	virtual void ModifyEnvelopeIndex(INDEX_MODIFY_FUNC pfnFunc);
-
-	void PrepareForSave();
-
-	void GetSize(float *w, float *h)
-	{
-		*w = m_Width * 32.0f;
-		*h = m_Height * 32.0f;
+		m_Writer.Finish();
 	}
 
-	void FlagModified(int x, int y, int w, int h);
-
-	IGraphics::CTextureHandle m_Texture;
-	int m_Game;
-	int m_Image;
-	int m_Width;
-	int m_Height;
-	CColor m_Color;
-	int m_ColorEnv;
-	int m_ColorEnvOffset;
-	CTile *m_pTiles;
-
-	// DDRace
-
-	int m_AutoMapperConfig;
-	int m_Seed;
-	bool m_AutoAutoMap;
-	int m_Tele;
-	int m_Speedup;
-	int m_Front;
-	int m_Switch;
-	int m_Tune;
-	char m_aFileName[IO_MAX_PATH_LENGTH];
-};
-
-class CLayerQuads : public CLayer
-{
 public:
-	CLayerQuads();
-	~CLayerQuads();
+	CDataFileWriterFinishJob(const char *pRealFileName, const char *pTempFileName, CDataFileWriter &&Writer) :
+		m_Writer(std::move(Writer))
+	{
+		str_copy(m_aRealFileName, pRealFileName);
+		str_copy(m_aTempFileName, pTempFileName);
+	}
 
-	virtual void Render(bool QuadPicker = false);
-	CQuad *NewQuad(int x, int y, int Width, int Height);
-
-	virtual void BrushSelecting(CUIRect Rect);
-	virtual int BrushGrab(CLayerGroup *pBrush, CUIRect Rect);
-	virtual void BrushPlace(CLayer *pBrush, float wx, float wy);
-	virtual void BrushFlipX();
-	virtual void BrushFlipY();
-	virtual void BrushRotate(float Amount);
-
-	virtual int RenderProperties(CUIRect *pToolbox);
-
-	virtual void ModifyImageIndex(INDEX_MODIFY_FUNC pfnFunc);
-	virtual void ModifyEnvelopeIndex(INDEX_MODIFY_FUNC pfnFunc);
-
-	void GetSize(float *w, float *h);
-
-	int m_Image;
-	array<CQuad> m_lQuads;
-};
-
-class CLayerGame : public CLayerTiles
-{
-public:
-	CLayerGame(int w, int h);
-	~CLayerGame();
-
-	virtual CTile GetTile(int x, int y);
-	virtual void SetTile(int x, int y, CTile tile);
-
-	virtual int RenderProperties(CUIRect *pToolbox);
+	const char *GetRealFileName() const { return m_aRealFileName; }
+	const char *GetTempFileName() const { return m_aTempFileName; }
 };
 
 class CEditor : public IEditor
 {
-	class IInput *m_pInput;
-	class IClient *m_pClient;
-	class CConfig *m_pConfig;
-	class IConsole *m_pConsole;
-	class IGraphics *m_pGraphics;
-	class ITextRender *m_pTextRender;
-	class ISound *m_pSound;
-	class IStorage *m_pStorage;
+	class IInput *m_pInput = nullptr;
+	class IClient *m_pClient = nullptr;
+	class IConfigManager *m_pConfigManager = nullptr;
+	class CConfig *m_pConfig = nullptr;
+	class IConsole *m_pConsole = nullptr;
+	class IEngine *m_pEngine = nullptr;
+	class IGraphics *m_pGraphics = nullptr;
+	class ITextRender *m_pTextRender = nullptr;
+	class ISound *m_pSound = nullptr;
+	class IStorage *m_pStorage = nullptr;
 	CRenderTools m_RenderTools;
-	CUI m_UI;
-	CUIEx m_UIEx;
+	CUi m_UI;
+
+	std::vector<std::reference_wrapper<CEditorComponent>> m_vComponents;
+	CMapView m_MapView;
+	CLayerSelector m_LayerSelector;
+	CPrompt m_Prompt;
+	CFontTyper m_FontTyper;
 
 	bool m_EditorWasUsedBefore = false;
 
@@ -651,168 +311,302 @@ class CEditor : public IEditor
 	IGraphics::CTextureHandle m_SwitchTexture;
 	IGraphics::CTextureHandle m_TuneTexture;
 
-	int GetTextureUsageFlag();
+	int GetTextureUsageFlag() const;
+
+	enum EPreviewState
+	{
+		PREVIEW_UNLOADED,
+		PREVIEW_LOADED,
+		PREVIEW_ERROR,
+	};
+
+	std::shared_ptr<CLayerGroup> m_apSavedBrushes[10];
+	static inline constexpr ColorRGBA ms_DefaultPropColor = ColorRGBA(1, 1, 1, 0.5f);
 
 public:
-	class IInput *Input() { return m_pInput; }
-	class IClient *Client() { return m_pClient; }
-	class CConfig *Config() { return m_pConfig; }
-	class IConsole *Console() { return m_pConsole; }
-	class IGraphics *Graphics() { return m_pGraphics; }
-	class ISound *Sound() { return m_pSound; }
-	class ITextRender *TextRender() { return m_pTextRender; }
-	class IStorage *Storage() { return m_pStorage; }
-	CUI *UI() { return &m_UI; }
-	CUIEx *UIEx() { return &m_UIEx; }
+	class IInput *Input() const { return m_pInput; }
+	class IClient *Client() const { return m_pClient; }
+	class IConfigManager *ConfigManager() const { return m_pConfigManager; }
+	class CConfig *Config() const { return m_pConfig; }
+	class IConsole *Console() const { return m_pConsole; }
+	class IEngine *Engine() const { return m_pEngine; }
+	class IGraphics *Graphics() const { return m_pGraphics; }
+	class ISound *Sound() const { return m_pSound; }
+	class ITextRender *TextRender() const { return m_pTextRender; }
+	class IStorage *Storage() const { return m_pStorage; }
+	CUi *Ui() { return &m_UI; }
 	CRenderTools *RenderTools() { return &m_RenderTools; }
 
+	CMapView *MapView() { return &m_MapView; }
+	const CMapView *MapView() const { return &m_MapView; }
+	CLayerSelector *LayerSelector() { return &m_LayerSelector; }
+
+	void SelectNextLayer();
+	void SelectPreviousLayer();
+
+	void FillGameTiles(EGameTileOp FillTile) const;
+	bool CanFillGameTiles() const;
+	void AddQuadOrSound();
+	void AddGroup();
+	void AddSoundLayer();
+	void AddTileLayer();
+	void AddQuadsLayer();
+	void AddSwitchLayer();
+	void AddFrontLayer();
+	void AddTuneLayer();
+	void AddSpeedupLayer();
+	void AddTeleLayer();
+	void DeleteSelectedLayer();
+	void LayerSelectImage();
+	bool IsNonGameTileLayerSelected() const;
+	void MapDetails();
+	void TestMapLocally();
+#define REGISTER_QUICK_ACTION(name, text, callback, disabled, active, button_color, description) CQuickAction m_QuickAction##name;
+#include <game/editor/quick_actions.h>
+#undef REGISTER_QUICK_ACTION
+
 	CEditor() :
-		m_TilesetPicker(16, 16)
+#define REGISTER_QUICK_ACTION(name, text, callback, disabled, active, button_color, description) m_QuickAction##name(text, description, callback, disabled, active, button_color),
+#include <game/editor/quick_actions.h>
+#undef REGISTER_QUICK_ACTION
+		m_ZoomEnvelopeX(1.0f, 0.1f, 600.0f),
+		m_ZoomEnvelopeY(640.0f, 0.1f, 32000.0f),
+		m_MapSettingsCommandContext(m_MapSettingsBackend.NewContext(&m_SettingsCommandInput))
 	{
-		m_pInput = 0;
-		m_pClient = 0;
-		m_pGraphics = 0;
-		m_pTextRender = 0;
-		m_pSound = 0;
+		m_EntitiesTexture.Invalidate();
+		m_FrontTexture.Invalidate();
+		m_TeleTexture.Invalidate();
+		m_SpeedupTexture.Invalidate();
+		m_SwitchTexture.Invalidate();
+		m_TuneTexture.Invalidate();
 
 		m_Mode = MODE_LAYERS;
 		m_Dialog = 0;
-		m_EditBoxActive = 0;
-		m_pTooltip = 0;
-
-		m_GridActive = false;
-		m_GridFactor = 1;
 
 		m_BrushColorEnabled = true;
 
-		m_aFileName[0] = 0;
-		m_aFileSaveName[0] = 0;
+		m_aFileName[0] = '\0';
+		m_aFileNamePending[0] = '\0';
+		m_aFileSaveName[0] = '\0';
 		m_ValidSaveFilename = false;
 
 		m_PopupEventActivated = false;
 		m_PopupEventWasActivated = false;
-		m_MouseInsidePopup = false;
 
 		m_FileDialogStorageType = 0;
-		m_pFileDialogTitle = 0;
-		m_pFileDialogButtonText = 0;
-		m_pFileDialogUser = 0;
-		m_aFileDialogFileName[0] = 0;
-		m_aFileDialogCurrentFolder[0] = 0;
-		m_aFileDialogCurrentLink[0] = 0;
+		m_FileDialogLastPopulatedStorageType = 0;
+		m_FileDialogSaveAction = false;
+		m_pFileDialogTitle = nullptr;
+		m_pFileDialogButtonText = nullptr;
+		m_pFileDialogUser = nullptr;
+		m_aFileDialogCurrentFolder[0] = '\0';
+		m_aFileDialogCurrentLink[0] = '\0';
+		m_aFilesSelectedName[0] = '\0';
 		m_pFileDialogPath = m_aFileDialogCurrentFolder;
-		m_FileDialogActivate = false;
 		m_FileDialogOpening = false;
-		m_FileDialogScrollValue = 0.0f;
 		m_FilesSelectedIndex = -1;
-		m_FilesStartAt = 0;
-		m_FilesCur = 0;
-		m_FilesStopAt = 999;
+
+		m_FilePreviewImage.Invalidate();
+		m_FilePreviewSound = -1;
+		m_FilePreviewState = PREVIEW_UNLOADED;
+
+		m_ToolbarPreviewSound = -1;
 
 		m_SelectEntitiesImage = "DDNet";
 
-		m_WorldOffsetX = 0;
-		m_WorldOffsetY = 0;
-		m_EditorOffsetX = 0.0f;
-		m_EditorOffsetY = 0.0f;
+		m_ResetZoomEnvelope = true;
+		m_OffsetEnvelopeX = 0.1f;
+		m_OffsetEnvelopeY = 0.5f;
 
-		m_WorldZoom = 1.0f;
-		m_ZoomLevel = 200;
-		m_LockMouse = false;
 		m_ShowMousePointer = true;
-		m_MouseDeltaX = 0;
-		m_MouseDeltaY = 0;
-		m_MouseDeltaWx = 0;
-		m_MouseDeltaWy = 0;
 
 		m_GuiActive = true;
-		m_ProofBorders = false;
+		m_PreviewZoom = false;
 
-		m_ShowTileInfo = false;
+		m_ShowTileInfo = SHOW_TILE_OFF;
 		m_ShowDetail = true;
 		m_Animate = false;
 		m_AnimateStart = 0;
 		m_AnimateTime = 0;
 		m_AnimateSpeed = 1;
+		m_AnimateUpdatePopup = false;
 
-		m_ShowEnvelopeEditor = 0;
-		m_ShowServerSettingsEditor = false;
-
-		m_ShowEnvelopePreview = 0;
+		m_ShowEnvelopePreview = SHOWENV_NONE;
 		m_SelectedQuadEnvelope = -1;
-		m_SelectedEnvelopePoint = -1;
+
+		m_vSelectedEnvelopePoints = {};
+		m_UpdateEnvPointInfo = false;
+		m_SelectedTangentInPoint = std::pair(-1, -1);
+		m_SelectedTangentOutPoint = std::pair(-1, -1);
+		m_CurrentQuadIndex = -1;
 
 		m_QuadKnifeActive = false;
 		m_QuadKnifeCount = 0;
+		mem_zero(m_aQuadKnifePoints, sizeof(m_aQuadKnifePoints));
 
-		m_CommandBox = 0.0f;
-		m_aSettingsCommand[0] = 0;
+		for(size_t i = 0; i < std::size(m_aSavedColors); ++i)
+		{
+			m_aSavedColors[i] = color_cast<ColorRGBA>(ColorHSLA(i / (float)std::size(m_aSavedColors), 1.0f, 0.5f));
+		}
 
-		ms_pUiGotContext = 0;
+		m_CheckerTexture.Invalidate();
+		for(auto &CursorTexture : m_aCursorTextures)
+			CursorTexture.Invalidate();
+
+		m_CursorType = CURSOR_NORMAL;
 
 		// DDRace
 
 		m_TeleNumber = 1;
-		m_SwitchNum = 1;
+		m_TeleCheckpointNumber = 1;
+		m_ViewTeleNumber = 0;
+
 		m_TuningNum = 1;
+		m_ViewTuning = 0;
+
+		m_SwitchNum = 1;
 		m_SwitchDelay = 0;
 		m_SpeedupForce = 50;
 		m_SpeedupMaxSpeed = 0;
 		m_SpeedupAngle = 0;
 		m_LargeLayerWasWarned = false;
 		m_PreventUnusedTilesWasWarned = false;
-		m_AllowPlaceUnusedTiles = 0;
+		m_AllowPlaceUnusedTiles = EUnusedEntities::NOT_ALLOWED;
 		m_BrushDrawDestructive = true;
-
-		m_Mentions = 0;
 	}
 
-	virtual void Init();
-	virtual void UpdateAndRender();
-	virtual bool HasUnsavedData() const { return m_Map.m_Modified; }
-	virtual void UpdateMentions() { m_Mentions++; }
-	virtual void ResetMentions() { m_Mentions = 0; }
+	class CHoverTile
+	{
+	public:
+		CHoverTile(int Group, int Layer, int x, int y, const CTile Tile) :
+			m_Group(Group),
+			m_Layer(Layer),
+			m_X(x),
+			m_Y(y),
+			m_Tile(Tile)
+		{
+		}
 
-	CLayerGroup *m_apSavedBrushes[10];
+		int m_Group;
+		int m_Layer;
+		int m_X;
+		int m_Y;
+		const CTile m_Tile;
+	};
+	std::vector<CHoverTile> m_vHoverTiles;
+	const std::vector<CHoverTile> &HoverTiles() const { return m_vHoverTiles; }
 
-	void FilelistPopulate(int StorageType);
+	void Init() override;
+	void OnUpdate() override;
+	void OnRender() override;
+	void OnActivate() override;
+	void OnWindowResize() override;
+	void OnClose() override;
+	void OnDialogClose();
+	bool HasUnsavedData() const override { return m_Map.m_Modified; }
+	void UpdateMentions() override { m_Mentions++; }
+	void ResetMentions() override { m_Mentions = 0; }
+	void OnIngameMoved() override { m_IngameMoved = true; }
+	void ResetIngameMoved() override { m_IngameMoved = false; }
+
+	void HandleCursorMovement();
+	void OnMouseMove(vec2 MousePos);
+	void MouseAxisLock(vec2 &CursorRel);
+	vec2 m_MouseAxisInitialPos = vec2(0.0f, 0.0f);
+	enum class EAxisLock
+	{
+		Start,
+		None,
+		Horizontal,
+		Vertical
+	} m_MouseAxisLockState = EAxisLock::Start;
+	void HandleAutosave();
+	bool PerformAutosave();
+	void HandleWriterFinishJobs();
+
+	void RefreshFilteredFileList();
+	void FilelistPopulate(int StorageType, bool KeepSelection = false);
 	void InvokeFileDialog(int StorageType, int FileType, const char *pTitle, const char *pButtonText,
-		const char *pBasepath, const char *pDefaultName,
-		void (*pfnFunc)(const char *pFilename, int StorageType, void *pUser), void *pUser);
+		const char *pBasepath, bool FilenameAsDefault,
+		bool (*pfnFunc)(const char *pFilename, int StorageType, void *pUser), void *pUser);
+	struct SStringKeyComparator
+	{
+		bool operator()(const char *pLhs, const char *pRhs) const
+		{
+			return str_comp(pLhs, pRhs) < 0;
+		}
+	};
+	std::map<const char *, CUi::SMessagePopupContext *, SStringKeyComparator> m_PopupMessageContexts;
+	void ShowFileDialogError(const char *pFormat, ...)
+		GNUC_ATTRIBUTE((format(printf, 2, 3)));
 
 	void Reset(bool CreateDefault = true);
-	virtual int Save(const char *pFilename);
-	virtual int Load(const char *pFilename, int StorageType);
-	int Append(const char *pFilename, int StorageType);
+	bool Save(const char *pFilename) override;
+	bool Load(const char *pFilename, int StorageType) override;
+	bool HandleMapDrop(const char *pFilename, int StorageType) override;
+	bool Append(const char *pFilename, int StorageType, bool IgnoreHistory = false);
 	void LoadCurrentMap();
 	void Render();
 
-	array<CQuad *> GetSelectedQuads();
-	CLayer *GetSelectedLayerType(int Index, int Type) const;
-	CLayer *GetSelectedLayer(int Index) const;
-	CLayerGroup *GetSelectedGroup() const;
-	CSoundSource *GetSelectedSource();
+	void RenderPressedKeys(CUIRect View);
+	void RenderSavingIndicator(CUIRect View);
+	void FreeDynamicPopupMenus();
+	void UpdateColorPipette();
+	void RenderMousePointer();
+	void RenderGameEntities(const std::shared_ptr<CLayerTiles> &pTiles);
+	void RenderSwitchEntities(const std::shared_ptr<CLayerTiles> &pTiles);
+
+	std::vector<CQuad *> GetSelectedQuads();
+	std::shared_ptr<CLayer> GetSelectedLayerType(int Index, int Type) const;
+	std::shared_ptr<CLayer> GetSelectedLayer(int Index) const;
+	std::shared_ptr<CLayerGroup> GetSelectedGroup() const;
+	CSoundSource *GetSelectedSource() const;
 	void SelectLayer(int LayerIndex, int GroupIndex = -1);
 	void AddSelectedLayer(int LayerIndex);
 	void SelectQuad(int Index);
+	void ToggleSelectQuad(int Index);
+	void DeselectQuads();
+	void DeselectQuadPoints();
+	void SelectQuadPoint(int QuadIndex, int Index);
+	void ToggleSelectQuadPoint(int QuadIndex, int Index);
 	void DeleteSelectedQuads();
 	bool IsQuadSelected(int Index) const;
+	bool IsQuadCornerSelected(int Index) const;
+	bool IsQuadPointSelected(int QuadIndex, int Index) const;
 	int FindSelectedQuadIndex(int Index) const;
 
-	float ScaleFontSize(char *pText, int TextSize, float FontSize, int Width);
-	int DoProperties(CUIRect *pToolbox, CProperty *pProps, int *pIDs, int *pNewVal, ColorRGBA Color = ColorRGBA(1, 1, 1, 0.5f));
+	int FindEnvPointIndex(int Index, int Channel) const;
+	void SelectEnvPoint(int Index);
+	void SelectEnvPoint(int Index, int Channel);
+	void ToggleEnvPoint(int Index, int Channel);
+	bool IsEnvPointSelected(int Index, int Channel) const;
+	bool IsEnvPointSelected(int Index) const;
+	void DeselectEnvPoints();
+	void SelectTangentOutPoint(int Index, int Channel);
+	bool IsTangentOutPointSelected(int Index, int Channel) const;
+	void SelectTangentInPoint(int Index, int Channel);
+	bool IsTangentInPointSelected(int Index, int Channel) const;
+	bool IsTangentInSelected() const;
+	bool IsTangentOutSelected() const;
+	bool IsTangentSelected() const;
+	std::pair<int, int> EnvGetSelectedTimeAndValue() const;
+
+	template<typename E>
+	SEditResult<E> DoPropertiesWithState(CUIRect *pToolbox, CProperty *pProps, int *pIds, int *pNewVal, const std::vector<ColorRGBA> &vColors = {});
+	int DoProperties(CUIRect *pToolbox, CProperty *pProps, int *pIds, int *pNewVal, const std::vector<ColorRGBA> &vColors = {});
+
+	CUi::SColorPickerPopupContext m_ColorPickerPopupContext;
+	const void *m_pColorPickerPopupActiveId = nullptr;
+	void DoColorPickerButton(const void *pId, const CUIRect *pRect, ColorRGBA Color, const std::function<void(ColorRGBA Color)> &SetColor);
 
 	int m_Mode;
 	int m_Dialog;
-	int m_EditBoxActive;
-	const char *m_pTooltip;
-
-	bool m_GridActive;
-	int m_GridFactor;
+	char m_aTooltip[256] = "";
 
 	bool m_BrushColorEnabled;
 
 	char m_aFileName[IO_MAX_PATH_LENGTH];
+	char m_aFileNamePending[IO_MAX_PATH_LENGTH];
 	char m_aFileSaveName[IO_MAX_PATH_LENGTH];
 	bool m_ValidSaveFilename;
 
@@ -821,197 +615,354 @@ public:
 		POPEVENT_EXIT = 0,
 		POPEVENT_LOAD,
 		POPEVENT_LOADCURRENT,
+		POPEVENT_LOADDROP,
 		POPEVENT_NEW,
 		POPEVENT_SAVE,
+		POPEVENT_SAVE_COPY,
+		POPEVENT_SAVE_IMG,
+		POPEVENT_SAVE_SOUND,
 		POPEVENT_LARGELAYER,
 		POPEVENT_PREVENTUNUSEDTILES,
 		POPEVENT_IMAGEDIV16,
 		POPEVENT_IMAGE_MAX,
-		POPEVENT_PLACE_BORDER_TILES
+		POPEVENT_SOUND_MAX,
+		POPEVENT_PLACE_BORDER_TILES,
+		POPEVENT_TILEART_BIG_IMAGE,
+		POPEVENT_TILEART_MANY_COLORS,
+		POPEVENT_TILEART_TOO_MANY_COLORS,
+		POPEVENT_QUADART_BIG_IMAGE,
+		POPEVENT_REMOVE_USED_IMAGE,
+		POPEVENT_REMOVE_USED_SOUND,
+		POPEVENT_RESTART_SERVER,
+		POPEVENT_RESTARTING_SERVER,
 	};
 
 	int m_PopupEventType;
 	int m_PopupEventActivated;
 	int m_PopupEventWasActivated;
-	bool m_MouseInsidePopup;
 	bool m_LargeLayerWasWarned;
 	bool m_PreventUnusedTilesWasWarned;
-	int m_AllowPlaceUnusedTiles;
+
+	enum class EUnusedEntities
+	{
+		ALLOWED_IMPLICIT = -1,
+		NOT_ALLOWED = 0,
+		ALLOWED_EXPLICIT = 1,
+	};
+	EUnusedEntities m_AllowPlaceUnusedTiles;
+	bool IsAllowPlaceUnusedTiles() const;
+
 	bool m_BrushDrawDestructive;
 
-	int m_Mentions;
+	int m_Mentions = 0;
+	bool m_IngameMoved = false;
 
 	enum
 	{
 		FILETYPE_MAP,
 		FILETYPE_IMG,
 		FILETYPE_SOUND,
+		NUM_FILETYPES
 	};
 
 	int m_FileDialogStorageType;
+	int m_FileDialogLastPopulatedStorageType;
+	bool m_FileDialogSaveAction;
 	const char *m_pFileDialogTitle;
 	const char *m_pFileDialogButtonText;
-	void (*m_pfnFileDialogFunc)(const char *pFileName, int StorageType, void *pUser);
+	bool (*m_pfnFileDialogFunc)(const char *pFileName, int StorageType, void *pUser);
 	void *m_pFileDialogUser;
-	char m_aFileDialogFileName[IO_MAX_PATH_LENGTH];
+	CLineInputBuffered<IO_MAX_PATH_LENGTH> m_FileDialogFileNameInput;
 	char m_aFileDialogCurrentFolder[IO_MAX_PATH_LENGTH];
 	char m_aFileDialogCurrentLink[IO_MAX_PATH_LENGTH];
-	char m_aFileDialogSearchText[64];
-	char m_aFileDialogPrevSearchText[64];
+	char m_aFilesSelectedName[IO_MAX_PATH_LENGTH];
+	CLineInputBuffered<IO_MAX_PATH_LENGTH> m_FileDialogFilterInput;
 	char *m_pFileDialogPath;
-	bool m_FileDialogActivate;
 	int m_FileDialogFileType;
-	float m_FileDialogScrollValue;
+	bool m_FileDialogMultipleStorages = false;
+	bool m_FileDialogShowingRoot = false;
 	int m_FilesSelectedIndex;
-	char m_aFileDialogNewFolderName[64];
-	char m_FileDialogErrString[64];
+	CLineInputBuffered<IO_MAX_PATH_LENGTH> m_FileDialogNewFolderNameInput;
+
 	IGraphics::CTextureHandle m_FilePreviewImage;
-	bool m_PreviewImageIsLoaded;
-	CImageInfo m_FilePreviewImageInfo;
+	int m_FilePreviewSound;
+	EPreviewState m_FilePreviewState;
+	int m_FilePreviewImageWidth;
+	int m_FilePreviewImageHeight;
 	bool m_FileDialogOpening;
+
+	int m_ToolbarPreviewSound;
 
 	struct CFilelistItem
 	{
 		char m_aFilename[IO_MAX_PATH_LENGTH];
-		char m_aName[128];
+		char m_aName[IO_MAX_PATH_LENGTH];
 		bool m_IsDir;
 		bool m_IsLink;
 		int m_StorageType;
-		bool m_IsVisible;
-
-		bool operator<(const CFilelistItem &Other) const { return !str_comp(m_aFilename, "..") ? true : !str_comp(Other.m_aFilename, "..") ? false : m_IsDir && !Other.m_IsDir ? true : !m_IsDir && Other.m_IsDir ? false : str_comp_nocase(m_aFilename, Other.m_aFilename) < 0; }
+		time_t m_TimeModified;
 	};
-	sorted_array<CFilelistItem> m_FileList;
-	int m_FilesStartAt;
-	int m_FilesCur;
-	int m_FilesStopAt;
+	std::vector<CFilelistItem> m_vCompleteFileList;
+	std::vector<const CFilelistItem *> m_vpFilteredFileList;
 
-	std::vector<std::string> m_SelectEntitiesFiles;
+	static bool CompareFilenameAscending(const CFilelistItem *pLhs, const CFilelistItem *pRhs)
+	{
+		if(str_comp(pLhs->m_aFilename, "..") == 0)
+			return true;
+		if(str_comp(pRhs->m_aFilename, "..") == 0)
+			return false;
+		if(pLhs->m_IsLink != pRhs->m_IsLink)
+			return pLhs->m_IsLink;
+		if(pLhs->m_IsDir != pRhs->m_IsDir)
+			return pLhs->m_IsDir;
+		return str_comp_filenames(pLhs->m_aName, pRhs->m_aName) < 0;
+	}
+
+	static bool CompareFilenameDescending(const CFilelistItem *pLhs, const CFilelistItem *pRhs)
+	{
+		if(str_comp(pLhs->m_aFilename, "..") == 0)
+			return true;
+		if(str_comp(pRhs->m_aFilename, "..") == 0)
+			return false;
+		if(pLhs->m_IsLink != pRhs->m_IsLink)
+			return pLhs->m_IsLink;
+		if(pLhs->m_IsDir != pRhs->m_IsDir)
+			return pLhs->m_IsDir;
+		return str_comp_filenames(pLhs->m_aName, pRhs->m_aName) > 0;
+	}
+
+	static bool CompareTimeModifiedAscending(const CFilelistItem *pLhs, const CFilelistItem *pRhs)
+	{
+		if(str_comp(pLhs->m_aFilename, "..") == 0)
+			return true;
+		if(str_comp(pRhs->m_aFilename, "..") == 0)
+			return false;
+		if(pLhs->m_IsLink != pRhs->m_IsLink)
+			return pLhs->m_IsLink;
+		if(pLhs->m_IsDir != pRhs->m_IsDir)
+			return pLhs->m_IsDir;
+		return pLhs->m_TimeModified < pRhs->m_TimeModified;
+	}
+
+	static bool CompareTimeModifiedDescending(const CFilelistItem *pLhs, const CFilelistItem *pRhs)
+	{
+		if(str_comp(pLhs->m_aFilename, "..") == 0)
+			return true;
+		if(str_comp(pRhs->m_aFilename, "..") == 0)
+			return false;
+		if(pLhs->m_IsLink != pRhs->m_IsLink)
+			return pLhs->m_IsLink;
+		if(pLhs->m_IsDir != pRhs->m_IsDir)
+			return pLhs->m_IsDir;
+		return pLhs->m_TimeModified > pRhs->m_TimeModified;
+	}
+
+	void SortFilteredFileList();
+	int m_SortByFilename = 1;
+	int m_SortByTimeModified = 0;
+
+	std::vector<std::string> m_vSelectEntitiesFiles;
 	std::string m_SelectEntitiesImage;
 
-	float m_WorldOffsetX;
-	float m_WorldOffsetY;
-	float m_EditorOffsetX;
-	float m_EditorOffsetY;
-	float m_WorldZoom;
-	int m_ZoomLevel;
-	bool m_LockMouse;
+	// Zooming
+	CSmoothValue m_ZoomEnvelopeX;
+	CSmoothValue m_ZoomEnvelopeY;
+
+	bool m_ResetZoomEnvelope;
+
+	float m_OffsetEnvelopeX;
+	float m_OffsetEnvelopeY;
+
 	bool m_ShowMousePointer;
 	bool m_GuiActive;
-	bool m_ProofBorders;
-	float m_MouseDeltaX;
-	float m_MouseDeltaY;
-	float m_MouseDeltaWx;
-	float m_MouseDeltaWy;
 
-	bool m_ShowTileInfo;
+	bool m_PreviewZoom;
+	float m_MouseWorldScale = 1.0f; // Mouse (i.e. UI) scale relative to the World (selected Group)
+	vec2 m_MouseWorldPos = vec2(0.0f, 0.0f);
+	vec2 m_MouseWorldNoParaPos = vec2(0.0f, 0.0f);
+	vec2 m_MouseDeltaWorld = vec2(0.0f, 0.0f);
+	const void *m_pContainerPanned;
+	const void *m_pContainerPannedLast;
+	char m_MapEditorId; // UI element ID for the main map editor
+
+	enum EShowTile
+	{
+		SHOW_TILE_OFF,
+		SHOW_TILE_DECIMAL,
+		SHOW_TILE_HEXADECIMAL
+	};
+	EShowTile m_ShowTileInfo;
 	bool m_ShowDetail;
+
 	bool m_Animate;
 	int64_t m_AnimateStart;
 	float m_AnimateTime;
 	float m_AnimateSpeed;
+	bool m_AnimateUpdatePopup;
 
-	int m_ShowEnvelopeEditor;
-	int m_ShowEnvelopePreview; //Values: 0-Off|1-Selected Envelope|2-All
-	bool m_ShowServerSettingsEditor;
+	enum EExtraEditor
+	{
+		EXTRAEDITOR_NONE = -1,
+		EXTRAEDITOR_ENVELOPES,
+		EXTRAEDITOR_SERVER_SETTINGS,
+		EXTRAEDITOR_HISTORY,
+		NUM_EXTRAEDITORS,
+	};
+	EExtraEditor m_ActiveExtraEditor = EXTRAEDITOR_NONE;
+	float m_aExtraEditorSplits[NUM_EXTRAEDITORS] = {250.0f, 250.0f, 250.0f};
+	float m_ToolBoxWidth = 100.0f;
+
+	enum EShowEnvelope
+	{
+		SHOWENV_NONE = 0,
+		SHOWENV_SELECTED,
+		SHOWENV_ALL
+	};
+	EShowEnvelope m_ShowEnvelopePreview;
 	bool m_ShowPicker;
 
-	array<int> m_lSelectedLayers;
-	array<int> m_lSelectedQuads;
+	std::vector<int> m_vSelectedLayers;
+	std::vector<int> m_vSelectedQuads;
 	int m_SelectedQuadPoint;
 	int m_SelectedQuadIndex;
 	int m_SelectedGroup;
-	int m_SelectedPoints;
+	int m_SelectedQuadPoints;
 	int m_SelectedEnvelope;
-	int m_SelectedEnvelopePoint;
+	std::vector<std::pair<int, int>> m_vSelectedEnvelopePoints;
 	int m_SelectedQuadEnvelope;
+	int m_CurrentQuadIndex;
 	int m_SelectedImage;
 	int m_SelectedSound;
 	int m_SelectedSource;
+	std::pair<int, int> m_SelectedTangentInPoint;
+	std::pair<int, int> m_SelectedTangentOutPoint;
+	bool m_UpdateEnvPointInfo;
 
 	bool m_QuadKnifeActive;
 	int m_QuadKnifeCount;
 	vec2 m_aQuadKnifePoints[4];
 
+	// Color palette and pipette
+	ColorRGBA m_aSavedColors[8];
+	ColorRGBA m_PipetteColor = ColorRGBA(1.0f, 1.0f, 1.0f, 1.0f);
+	bool m_ColorPipetteActive = false;
+
 	IGraphics::CTextureHandle m_CheckerTexture;
-	IGraphics::CTextureHandle m_BackgroundTexture;
-	IGraphics::CTextureHandle m_CursorTexture;
+
+	enum ECursorType
+	{
+		CURSOR_NORMAL,
+		CURSOR_RESIZE_V,
+		CURSOR_RESIZE_H,
+		NUM_CURSORS
+	};
+	IGraphics::CTextureHandle m_aCursorTextures[ECursorType::NUM_CURSORS];
+	ECursorType m_CursorType;
 
 	IGraphics::CTextureHandle GetEntitiesTexture();
 
-	CLayerGroup m_Brush;
-	CLayerTiles m_TilesetPicker;
-	CLayerQuads m_QuadsetPicker;
+	std::shared_ptr<CLayerGroup> m_pBrush;
+	std::shared_ptr<CLayerTiles> m_pTilesetPicker;
+	std::shared_ptr<CLayerQuads> m_pQuadsetPicker;
 
-	static const void *ms_pUiGotContext;
+	const void *m_pUiGotContext = nullptr;
 
 	CEditorMap m_Map;
+	std::deque<std::shared_ptr<CDataFileWriterFinishJob>> m_WriterFinishJobs;
+
 	int m_ShiftBy;
 
-	static void EnvelopeEval(int TimeOffsetMillis, int Env, float *pChannels, void *pUser);
+	static void EnvelopeEval(int TimeOffsetMillis, int Env, ColorRGBA &Result, size_t Channels, void *pUser);
 
-	float m_CommandBox;
-	char m_aSettingsCommand[256];
+	CLineInputBuffered<256> m_SettingsCommandInput;
+	CMapSettingsBackend m_MapSettingsBackend;
+	CMapSettingsBackend::CContext m_MapSettingsCommandContext;
+
+	CImageInfo m_TileartImageInfo;
+	void AddTileart(bool IgnoreHistory = false);
+	char m_aTileartFilename[IO_MAX_PATH_LENGTH];
+	void TileartCheckColors();
+
+	CImageInfo m_QuadArtImageInfo;
+	CQuadArtParameters m_QuadArtParameters;
+	void AddQuadArt(bool IgnoreHistory = false);
 
 	void PlaceBorderTiles();
-	int DoButton_Editor_Common(const void *pID, const char *pText, int Checked, const CUIRect *pRect, int Flags, const char *pToolTip);
-	int DoButton_Editor(const void *pID, const char *pText, int Checked, const CUIRect *pRect, int Flags, const char *pToolTip, int AlignVert = 1);
-	int DoButton_Env(const void *pID, const char *pText, int Checked, const CUIRect *pRect, const char *pToolTip, ColorRGBA Color);
 
-	int DoButton_Tab(const void *pID, const char *pText, int Checked, const CUIRect *pRect, int Flags, const char *pToolTip);
-	int DoButton_Ex(const void *pID, const char *pText, int Checked, const CUIRect *pRect, int Flags, const char *pToolTip, int Corners, float FontSize = 10.0f, int AlignVert = 1);
-	int DoButton_ButtonDec(const void *pID, const char *pText, int Checked, const CUIRect *pRect, int Flags, const char *pToolTip);
-	int DoButton_ButtonInc(const void *pID, const char *pText, int Checked, const CUIRect *pRect, int Flags, const char *pToolTip);
+	void UpdateTooltip(const void *pId, const CUIRect *pRect, const char *pToolTip);
+	int DoButton_Editor_Common(const void *pId, const char *pText, int Checked, const CUIRect *pRect, int Flags, const char *pToolTip);
+	int DoButton_Editor(const void *pId, const char *pText, int Checked, const CUIRect *pRect, int Flags, const char *pToolTip);
+	int DoButton_Env(const void *pId, const char *pText, int Checked, const CUIRect *pRect, const char *pToolTip, ColorRGBA Color, int Corners);
 
-	int DoButton_File(const void *pID, const char *pText, int Checked, const CUIRect *pRect, int Flags, const char *pToolTip);
+	int DoButton_Ex(const void *pId, const char *pText, int Checked, const CUIRect *pRect, int Flags, const char *pToolTip, int Corners, float FontSize = EditorFontSizes::MENU, int Align = TEXTALIGN_MC);
+	int DoButton_FontIcon(const void *pId, const char *pText, int Checked, const CUIRect *pRect, int Flags, const char *pToolTip, int Corners, float FontSize = 10.0f);
+	int DoButton_MenuItem(const void *pId, const char *pText, int Checked, const CUIRect *pRect, int Flags = BUTTONFLAG_LEFT, const char *pToolTip = nullptr);
 
-	int DoButton_Menu(const void *pID, const char *pText, int Checked, const CUIRect *pRect, int Flags, const char *pToolTip);
-	int DoButton_MenuItem(const void *pID, const char *pText, int Checked, const CUIRect *pRect, int Flags = 0, const char *pToolTip = 0);
+	int DoButton_DraggableEx(const void *pId, const char *pText, int Checked, const CUIRect *pRect, bool *pClicked, bool *pAbrupted, int Flags, const char *pToolTip = nullptr, int Corners = IGraphics::CORNER_ALL, float FontSize = 10.0f);
 
-	int DoButton_ColorPicker(const void *pID, const CUIRect *pRect, ColorRGBA *pColor, const char *pToolTip = 0);
+	bool DoEditBox(CLineInput *pLineInput, const CUIRect *pRect, float FontSize, int Corners = IGraphics::CORNER_ALL, const char *pToolTip = nullptr, const std::vector<STextColorSplit> &vColorSplits = {});
+	bool DoClearableEditBox(CLineInput *pLineInput, const CUIRect *pRect, float FontSize, int Corners = IGraphics::CORNER_ALL, const char *pToolTip = nullptr, const std::vector<STextColorSplit> &vColorSplits = {});
 
-	bool DoEditBox(void *pID, const CUIRect *pRect, char *pStr, unsigned StrSize, float FontSize, float *pOffset, bool Hidden = false, int Corners = CUI::CORNER_ALL);
-	bool DoClearableEditBox(void *pID, void *pClearID, const CUIRect *pRect, char *pStr, unsigned StrSize, float FontSize, float *pOffset, bool Hidden, int Corners);
+	void DoMapSettingsEditBox(CMapSettingsBackend::CContext *pContext, const CUIRect *pRect, float FontSize, float DropdownMaxHeight, int Corners = IGraphics::CORNER_ALL, const char *pToolTip = nullptr);
 
-	void RenderBackground(CUIRect View, IGraphics::CTextureHandle Texture, float Size, float Brightness);
+	template<typename T>
+	int DoEditBoxDropdown(SEditBoxDropdownContext *pDropdown, CLineInput *pLineInput, const CUIRect *pEditBoxRect, int x, float MaxHeight, bool AutoWidth, const std::vector<T> &vData, const FDropdownRenderCallback<T> &pfnMatchCallback);
+	template<typename T>
+	int RenderEditBoxDropdown(SEditBoxDropdownContext *pDropdown, CUIRect View, CLineInput *pLineInput, int x, float MaxHeight, bool AutoWidth, const std::vector<T> &vData, const FDropdownRenderCallback<T> &pfnMatchCallback);
 
-	void RenderGrid(CLayerGroup *pGroup);
+	void RenderBackground(CUIRect View, IGraphics::CTextureHandle Texture, float Size, float Brightness) const;
 
-	void UiInvokePopupMenu(void *pID, int Flags, float X, float Y, float W, float H, int (*pfnFunc)(CEditor *pEditor, CUIRect Rect, void *pContext), void *pContext = 0);
-	void UiDoPopupMenu();
-	bool UiPopupExists(void *pID);
-	bool UiPopupOpen();
+	SEditResult<int> UiDoValueSelector(void *pId, CUIRect *pRect, const char *pLabel, int Current, int Min, int Max, int Step, float Scale, const char *pToolTip, bool IsDegree = false, bool IsHex = false, int Corners = IGraphics::CORNER_ALL, const ColorRGBA *pColor = nullptr, bool ShowValue = true);
 
-	int UiDoValueSelector(void *pID, CUIRect *pRect, const char *pLabel, int Current, int Min, int Max, int Step, float Scale, const char *pToolTip, bool IsDegree = false, bool IsHex = false, int corners = CUI::CORNER_ALL, ColorRGBA *Color = 0);
-
-	static int PopupGroup(CEditor *pEditor, CUIRect View, void *pContext);
-
-	struct CLayerPopupContext
+	static CUi::EPopupMenuFunctionResult PopupMenuFile(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupMenuTools(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupMenuSettings(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupGroup(void *pContext, CUIRect View, bool Active);
+	struct SLayerPopupContext : public SPopupMenuId
 	{
-		array<CLayerTiles *> m_aLayers;
+		CEditor *m_pEditor;
+		std::vector<std::shared_ptr<CLayerTiles>> m_vpLayers;
+		std::vector<int> m_vLayerIndices;
 		CLayerTiles::SCommonPropState m_CommonPropState;
 	};
-	static int PopupLayer(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupQuad(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupPoint(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupNewFolder(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupMapInfo(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupEvent(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupSelectImage(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupSelectSound(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupSelectGametileOp(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupImage(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupMenuFile(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupSelectConfigAutoMap(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupSound(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupSource(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupColorPicker(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupEntities(CEditor *pEditor, CUIRect View, void *pContext);
+	static CUi::EPopupMenuFunctionResult PopupLayer(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupQuad(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupSource(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupPoint(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupEnvPoint(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupEnvPointMulti(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupEnvPointCurveType(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupImage(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupSound(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupNewFolder(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupMapInfo(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupEvent(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupSelectImage(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupSelectSound(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupSelectGametileOp(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupSelectConfigAutoMap(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupSelectAutoMapReference(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupTele(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupSpeedup(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupSwitch(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupTune(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupGoto(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupEntities(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupProofMode(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupAnimateSettings(void *pContext, CUIRect View, bool Active);
+	int m_PopupEnvelopeSelectedPoint = -1;
+	static CUi::EPopupMenuFunctionResult PopupEnvelopeCurvetype(void *pContext, CUIRect View, bool Active);
+	static CUi::EPopupMenuFunctionResult PopupQuadArt(void *pContext, CUIRect View, bool Active);
 
-	static void CallbackOpenMap(const char *pFileName, int StorageType, void *pUser);
-	static void CallbackAppendMap(const char *pFileName, int StorageType, void *pUser);
-	static void CallbackSaveMap(const char *pFileName, int StorageType, void *pUser);
-	static void CallbackSaveCopyMap(const char *pFileName, int StorageType, void *pUser);
+	static bool CallbackOpenMap(const char *pFileName, int StorageType, void *pUser);
+	static bool CallbackAppendMap(const char *pFileName, int StorageType, void *pUser);
+	static bool CallbackSaveMap(const char *pFileName, int StorageType, void *pUser);
+	static bool CallbackSaveCopyMap(const char *pFileName, int StorageType, void *pUser);
+	static bool CallbackAddTileart(const char *pFilepath, int StorageType, void *pUser);
+	static bool CallbackAddQuadArt(const char *pFilepath, int StorageType, void *pUser);
+	static bool CallbackSaveImage(const char *pFileName, int StorageType, void *pUser);
+	static bool CallbackSaveSound(const char *pFileName, int StorageType, void *pUser);
+	static bool CallbackCustomEntities(const char *pFileName, int StorageType, void *pUser);
 
 	void PopupSelectImageInvoke(int Current, float x, float y);
 	int PopupSelectImageResult();
@@ -1025,126 +976,140 @@ public:
 	void PopupSelectSoundInvoke(int Current, float x, float y);
 	int PopupSelectSoundResult();
 
-	void DoQuadEnvelopes(const array<CQuad> &m_lQuads, IGraphics::CTextureHandle Texture = IGraphics::CTextureHandle());
+	void PopupSelectAutoMapReferenceInvoke(int Current, float x, float y);
+	int PopupSelectAutoMapReferenceResult();
+
+	void DoQuadEnvelopes(const std::vector<CQuad> &vQuads, IGraphics::CTextureHandle Texture = IGraphics::CTextureHandle());
 	void DoQuadEnvPoint(const CQuad *pQuad, int QIndex, int pIndex);
-	void DoQuadPoint(CQuad *pQuad, int QuadIndex, int v);
+	void DoQuadPoint(int LayerIndex, const std::shared_ptr<CLayerQuads> &pLayer, CQuad *pQuad, int QuadIndex, int v);
+	void SetHotQuadPoint(const std::shared_ptr<CLayerQuads> &pLayer);
 
 	float TriangleArea(vec2 A, vec2 B, vec2 C);
 	bool IsInTriangle(vec2 Point, vec2 A, vec2 B, vec2 C);
 	void DoQuadKnife(int QuadIndex);
 
-	void DoSoundSource(CSoundSource *pSource, int Index);
+	void DoSoundSource(int LayerIndex, CSoundSource *pSource, int Index);
 
+	enum class EAxis
+	{
+		AXIS_NONE = 0,
+		AXIS_X,
+		AXIS_Y
+	};
+	struct SAxisAlignedBoundingBox
+	{
+		enum
+		{
+			POINT_TL = 0,
+			POINT_TR,
+			POINT_BL,
+			POINT_BR,
+			POINT_CENTER,
+			NUM_POINTS
+		};
+		CPoint m_aPoints[NUM_POINTS];
+	};
 	void DoMapEditor(CUIRect View);
-	void DoToolbar(CUIRect Toolbar);
-	void DoQuad(CQuad *pQuad, int Index);
-	ColorRGBA GetButtonColor(const void *pID, int Checked);
+	void DoToolbarLayers(CUIRect Toolbar);
+	void DoToolbarImages(CUIRect Toolbar);
+	void DoToolbarSounds(CUIRect Toolbar);
+	void DoQuad(int LayerIndex, const std::shared_ptr<CLayerQuads> &pLayer, CQuad *pQuad, int Index);
+	void PreparePointDrag(const std::shared_ptr<CLayerQuads> &pLayer, CQuad *pQuad, int QuadIndex, int PointIndex);
+	void DoPointDrag(const std::shared_ptr<CLayerQuads> &pLayer, CQuad *pQuad, int QuadIndex, int PointIndex, int OffsetX, int OffsetY);
+	EAxis GetDragAxis(int OffsetX, int OffsetY) const;
+	void DrawAxis(EAxis Axis, CPoint &OriginalPoint, CPoint &Point) const;
+	void DrawAABB(const SAxisAlignedBoundingBox &AABB, int OffsetX = 0, int OffsetY = 0) const;
+	ColorRGBA GetButtonColor(const void *pId, int Checked);
 
-	static void ReplaceImage(const char *pFilename, int StorageType, void *pUser);
-	static void ReplaceSound(const char *pFileName, int StorageType, void *pUser);
-	static void AddImage(const char *pFilename, int StorageType, void *pUser);
-	static void AddSound(const char *pFileName, int StorageType, void *pUser);
+	// Alignment methods
+	// These methods take `OffsetX` and `OffsetY` because the calculations are made with the original positions
+	// of the quad(s), before we started dragging. This allows us to edit `OffsetX` and `OffsetY` based on the previously
+	// calculated alignments.
+	struct SAlignmentInfo
+	{
+		CPoint m_AlignedPoint; // The "aligned" point, which we want to align/snap to
+		union
+		{
+			// The current changing value when aligned to this point. When aligning to a point on the X axis, then the X value is changing because
+			// we aligned the Y values (X axis aligned => Y values are the same, Y axis aligned => X values are the same).
+			int m_X;
+			int m_Y;
+		};
+		EAxis m_Axis; // The axis we are aligning on
+		int m_PointIndex; // The point index we are aligning
+		int m_Diff; // Store the difference
+	};
+	void ComputePointAlignments(const std::shared_ptr<CLayerQuads> &pLayer, CQuad *pQuad, int QuadIndex, int PointIndex, int OffsetX, int OffsetY, std::vector<SAlignmentInfo> &vAlignments, bool Append = false) const;
+	void ComputePointsAlignments(const std::shared_ptr<CLayerQuads> &pLayer, bool Pivot, int OffsetX, int OffsetY, std::vector<SAlignmentInfo> &vAlignments) const;
+	void ComputeAABBAlignments(const std::shared_ptr<CLayerQuads> &pLayer, const SAxisAlignedBoundingBox &AABB, int OffsetX, int OffsetY, std::vector<SAlignmentInfo> &vAlignments) const;
+	void DrawPointAlignments(const std::vector<SAlignmentInfo> &vAlignments, int OffsetX, int OffsetY) const;
+	void QuadSelectionAABB(const std::shared_ptr<CLayerQuads> &pLayer, SAxisAlignedBoundingBox &OutAABB);
+	void ApplyAlignments(const std::vector<SAlignmentInfo> &vAlignments, int &OffsetX, int &OffsetY);
+	void ApplyAxisAlignment(int &OffsetX, int &OffsetY) const;
+
+	bool ReplaceImage(const char *pFilename, int StorageType, bool CheckDuplicate);
+	static bool ReplaceImageCallback(const char *pFilename, int StorageType, void *pUser);
+	bool ReplaceSound(const char *pFileName, int StorageType, bool CheckDuplicate);
+	static bool ReplaceSoundCallback(const char *pFileName, int StorageType, void *pUser);
+	static bool AddImage(const char *pFilename, int StorageType, void *pUser);
+	static bool AddSound(const char *pFileName, int StorageType, void *pUser);
+	static bool IsAssetUsed(int FileType, int Index, void *pUser);
 
 	bool IsEnvelopeUsed(int EnvelopeIndex) const;
+	void RemoveUnusedEnvelopes();
 
-	void RenderImages(CUIRect Toolbox, CUIRect View);
-	void RenderLayers(CUIRect Toolbox, CUIRect View);
-	void RenderSounds(CUIRect Toolbox, CUIRect View);
+	static bool IsVanillaImage(const char *pImage);
+
+	void RenderLayers(CUIRect LayersBox);
+	void RenderImagesList(CUIRect Toolbox);
+	void RenderSelectedImage(CUIRect View);
+	void RenderSounds(CUIRect Toolbox);
 	void RenderModebar(CUIRect View);
-	void RenderStatusbar(CUIRect View);
+	void RenderStatusbar(CUIRect View, CUIRect *pTooltipRect);
+	void RenderTooltip(CUIRect TooltipRect);
+
 	void RenderEnvelopeEditor(CUIRect View);
+
+	void RenderMapSettingsErrorDialog();
 	void RenderServerSettingsEditor(CUIRect View, bool ShowServerSettingsEditorLast);
+	static void MapSettingsDropdownRenderCallback(const SPossibleValueMatch &Match, char (&aOutput)[128], std::vector<STextColorSplit> &vColorSplits);
+
+	void RenderEditorHistory(CUIRect View);
+
+	enum class EDragSide // Which side is the drag bar on
+	{
+		SIDE_BOTTOM,
+		SIDE_LEFT,
+		SIDE_TOP,
+		SIDE_RIGHT
+	};
+	void DoEditorDragBar(CUIRect View, CUIRect *pDragBar, EDragSide Side, float *pValue, float MinValue = 100.0f, float MaxValue = 400.0f);
+
+	void SetHotEnvelopePoint(const CUIRect &View, const std::shared_ptr<CEnvelope> &pEnvelope, int ActiveChannels);
 
 	void RenderMenubar(CUIRect Menubar);
 	void RenderFileDialog();
 
-	void AddFileDialogEntry(int Index, CUIRect *pView);
 	void SelectGameLayer();
-	void SortImages();
-	void SelectLayerByTile(float &Scroll);
+	std::vector<int> SortImages();
 
-	//Tile Numbers For Explanations - TODO: Add/Improve tiles and explanations
-	enum
-	{
-		TILE_PUB_AIR,
-		TILE_PUB_HOOKABLE,
-		TILE_PUB_DEATH,
-		TILE_PUB_UNHOOKABLE,
+	void DoAudioPreview(CUIRect View, const void *pPlayPauseButtonId, const void *pStopButtonId, const void *pSeekBarId, int SampleId);
 
-		TILE_PUB_CREDITS1 = 140,
-		TILE_PUB_CREDITS2,
-		TILE_PUB_CREDITS3,
-		TILE_PUB_CREDITS4,
-		TILE_PUB_CREDITS5 = 156,
-		TILE_PUB_CREDITS6,
-		TILE_PUB_CREDITS7,
-		TILE_PUB_CREDITS8,
+	// Zooming
+	void ZoomAdaptOffsetX(float ZoomFactor, const CUIRect &View);
+	void UpdateZoomEnvelopeX(const CUIRect &View);
 
-		TILE_PUB_ENTITIES_OFF1 = 190,
-		TILE_PUB_ENTITIES_OFF2,
-	};
+	void ZoomAdaptOffsetY(float ZoomFactor, const CUIRect &View);
+	void UpdateZoomEnvelopeY(const CUIRect &View);
 
-	enum
-	{
-		TILE_FNG_SPIKE_GOLD = 7,
-		TILE_FNG_SPIKE_NORMAL,
-		TILE_FNG_SPIKE_RED,
-		TILE_FNG_SPIKE_BLUE,
-		TILE_FNG_SCORE_RED,
-		TILE_FNG_SCORE_BLUE,
-
-		TILE_FNG_SPIKE_GREEN = 14,
-		TILE_FNG_SPIKE_PURPLE,
-
-		TILE_FNG_SPAWN = 192,
-		TILE_FNG_SPAWN_RED,
-		TILE_FNG_SPAWN_BLUE,
-		TILE_FNG_FLAG_RED,
-		TILE_FNG_FLAG_BLUE,
-		TILE_FNG_SHIELD,
-		TILE_FNG_HEART,
-		TILE_FNG_SHOTGUN,
-		TILE_FNG_GRENADE,
-		TILE_FNG_NINJA,
-		TILE_FNG_LASER,
-
-		TILE_FNG_SPIKE_OLD1 = 208,
-		TILE_FNG_SPIKE_OLD2,
-		TILE_FNG_SPIKE_OLD3
-	};
-
-	enum
-	{
-		TILE_VANILLA_SPAWN = 192,
-		TILE_VANILLA_SPAWN_RED,
-		TILE_VANILLA_SPAWN_BLUE,
-		TILE_VANILLA_FLAG_RED,
-		TILE_VANILLA_FLAG_BLUE,
-		TILE_VANILLA_SHIELD,
-		TILE_VANILLA_HEART,
-		TILE_VANILLA_SHOTGUN,
-		TILE_VANILLA_GRENADE,
-		TILE_VANILLA_NINJA,
-		TILE_VANILLA_LASER,
-	};
-
-	//Explanations
-	enum
-	{
-		EXPLANATION_DDNET,
-		EXPLANATION_FNG,
-		EXPLANATION_RACE,
-		EXPLANATION_VANILLA,
-		EXPLANATION_BLOCKWORLDS
-	};
-	static const char *Explain(int ExplanationID, int Tile, int Layer);
-
-	int GetLineDistance() const;
-	void ZoomMouseTarget(float ZoomFactor);
-
-	static ColorHSVA ms_PickerColor;
-	static int ms_SVPicker;
-	static int ms_HuePicker;
+	void ResetZoomEnvelope(const std::shared_ptr<CEnvelope> &pEnvelope, int ActiveChannels);
+	void RemoveTimeOffsetEnvelope(const std::shared_ptr<CEnvelope> &pEnvelope);
+	float ScreenToEnvelopeX(const CUIRect &View, float x) const;
+	float EnvelopeToScreenX(const CUIRect &View, float x) const;
+	float ScreenToEnvelopeY(const CUIRect &View, float y) const;
+	float EnvelopeToScreenY(const CUIRect &View, float y) const;
+	float ScreenToEnvelopeDX(const CUIRect &View, float DeltaX);
+	float ScreenToEnvelopeDY(const CUIRect &View, float DeltaY);
 
 	// DDRace
 
@@ -1154,13 +1119,12 @@ public:
 	IGraphics::CTextureHandle GetSwitchTexture();
 	IGraphics::CTextureHandle GetTuneTexture();
 
-	static int PopupTele(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupSpeedup(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupSwitch(CEditor *pEditor, CUIRect View, void *pContext);
-	static int PopupTune(CEditor *pEditor, CUIRect View, void *pContext);
 	unsigned char m_TeleNumber;
+	unsigned char m_TeleCheckpointNumber;
+	unsigned char m_ViewTeleNumber;
 
 	unsigned char m_TuningNum;
+	unsigned char m_ViewTuning;
 
 	unsigned char m_SpeedupForce;
 	unsigned char m_SpeedupMaxSpeed;
@@ -1168,124 +1132,26 @@ public:
 
 	unsigned char m_SwitchNum;
 	unsigned char m_SwitchDelay;
+	unsigned char m_ViewSwitch;
+
+	void AdjustBrushSpecialTiles(bool UseNextFree, int Adjust = 0);
+
+	// Undo/Redo
+	CEditorHistory m_EditorHistory;
+	CEditorHistory m_ServerSettingsHistory;
+	CEditorHistory m_EnvelopeEditorHistory;
+	CQuadEditTracker m_QuadTracker;
+	CEnvelopeEditorOperationTracker m_EnvOpTracker;
+
+private:
+	void UndoLastAction();
+	void RedoLastAction();
+
+	std::map<int, CPoint[5]> m_QuadDragOriginalPoints;
 };
 
 // make sure to inline this function
 inline class IGraphics *CLayer::Graphics() { return m_pEditor->Graphics(); }
 inline class ITextRender *CLayer::TextRender() { return m_pEditor->TextRender(); }
-
-// DDRace
-
-class CLayerTele : public CLayerTiles
-{
-public:
-	CLayerTele(int w, int h);
-	~CLayerTele();
-
-	CTeleTile *m_pTeleTile;
-	unsigned char m_TeleNum;
-
-	virtual void Resize(int NewW, int NewH);
-	virtual void Shift(int Direction);
-	virtual bool IsEmpty(CLayerTiles *pLayer);
-	virtual void BrushDraw(CLayer *pBrush, float wx, float wy);
-	virtual void BrushFlipX();
-	virtual void BrushFlipY();
-	virtual void BrushRotate(float Amount);
-	virtual void FillSelection(bool Empty, CLayer *pBrush, CUIRect Rect);
-	virtual bool ContainsElementWithId(int Id);
-};
-
-class CLayerSpeedup : public CLayerTiles
-{
-public:
-	CLayerSpeedup(int w, int h);
-	~CLayerSpeedup();
-
-	CSpeedupTile *m_pSpeedupTile;
-	int m_SpeedupForce;
-	int m_SpeedupMaxSpeed;
-	int m_SpeedupAngle;
-
-	virtual void Resize(int NewW, int NewH);
-	virtual void Shift(int Direction);
-	virtual bool IsEmpty(CLayerTiles *pLayer);
-	virtual void BrushDraw(CLayer *pBrush, float wx, float wy);
-	virtual void BrushFlipX();
-	virtual void BrushFlipY();
-	virtual void BrushRotate(float Amount);
-	virtual void FillSelection(bool Empty, CLayer *pBrush, CUIRect Rect);
-};
-
-class CLayerFront : public CLayerTiles
-{
-public:
-	CLayerFront(int w, int h);
-
-	virtual void Resize(int NewW, int NewH);
-	virtual void SetTile(int x, int y, CTile tile);
-};
-
-class CLayerSwitch : public CLayerTiles
-{
-public:
-	CLayerSwitch(int w, int h);
-	~CLayerSwitch();
-
-	CSwitchTile *m_pSwitchTile;
-	unsigned char m_SwitchNumber;
-	unsigned char m_SwitchDelay;
-
-	virtual void Resize(int NewW, int NewH);
-	virtual void Shift(int Direction);
-	virtual bool IsEmpty(CLayerTiles *pLayer);
-	virtual void BrushDraw(CLayer *pBrush, float wx, float wy);
-	virtual void BrushFlipX();
-	virtual void BrushFlipY();
-	virtual void BrushRotate(float Amount);
-	virtual void FillSelection(bool Empty, CLayer *pBrush, CUIRect Rect);
-	virtual bool ContainsElementWithId(int Id);
-};
-
-class CLayerTune : public CLayerTiles
-{
-public:
-	CLayerTune(int w, int h);
-	~CLayerTune();
-
-	CTuneTile *m_pTuneTile;
-	unsigned char m_TuningNumber;
-
-	virtual void Resize(int NewW, int NewH);
-	virtual void Shift(int Direction);
-	virtual bool IsEmpty(CLayerTiles *pLayer);
-	virtual void BrushDraw(CLayer *pBrush, float wx, float wy);
-	virtual void BrushFlipX();
-	virtual void BrushFlipY();
-	virtual void BrushRotate(float Amount);
-	virtual void FillSelection(bool Empty, CLayer *pBrush, CUIRect Rect);
-};
-
-class CLayerSounds : public CLayer
-{
-public:
-	CLayerSounds();
-	~CLayerSounds();
-
-	virtual void Render(bool Tileset = false);
-	CSoundSource *NewSource(int x, int y);
-
-	virtual void BrushSelecting(CUIRect Rect);
-	virtual int BrushGrab(CLayerGroup *pBrush, CUIRect Rect);
-	virtual void BrushPlace(CLayer *pBrush, float wx, float wy);
-
-	virtual int RenderProperties(CUIRect *pToolbox);
-
-	virtual void ModifyEnvelopeIndex(INDEX_MODIFY_FUNC pfnFunc);
-	virtual void ModifySoundIndex(INDEX_MODIFY_FUNC pfnFunc);
-
-	int m_Sound;
-	array<CSoundSource> m_lSources;
-};
 
 #endif

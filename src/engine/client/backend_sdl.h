@@ -1,22 +1,21 @@
 #ifndef ENGINE_CLIENT_BACKEND_SDL_H
 #define ENGINE_CLIENT_BACKEND_SDL_H
 
-#include "SDL.h"
+#include <SDL_video.h>
 
 #include <base/detect.h>
 
-#include "engine/graphics.h"
-#include "graphics_defines.h"
+#include <engine/graphics.h>
 
-#include "blocklist_driver.h"
-#include "graphics_threaded.h"
+#include <engine/client/graphics_threaded.h>
 
-#include <base/tl/threading.h>
+#include <engine/client/backend/backend_base.h>
 
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
+#include <cstdint>
 #include <mutex>
-#include <thread>
 #include <vector>
 
 #if defined(CONF_PLATFORM_MACOS)
@@ -47,37 +46,57 @@ public:
 // basic threaded backend, abstract, missing init and shutdown functions
 class CGraphicsBackend_Threaded : public IGraphicsBackend
 {
+private:
+	TTranslateFunc m_TranslateFunc;
+	SGfxWarningContainer m_Warning;
+
 public:
 	// constructed on the main thread, the rest of the functions is run on the render thread
 	class ICommandProcessor
 	{
 	public:
-		virtual ~ICommandProcessor() {}
+		virtual ~ICommandProcessor() = default;
 		virtual void RunBuffer(CCommandBuffer *pBuffer) = 0;
+
+		virtual const SGfxErrorContainer &GetError() const = 0;
+		virtual void ErroneousCleanup() = 0;
+
+		virtual const SGfxWarningContainer &GetWarning() const = 0;
 	};
 
-	CGraphicsBackend_Threaded();
+	CGraphicsBackend_Threaded(TTranslateFunc &&TranslateFunc);
 
-	virtual void RunBuffer(CCommandBuffer *pBuffer);
-	virtual void RunBufferSingleThreadedUnsafe(CCommandBuffer *pBuffer);
-	virtual bool IsIdle() const;
-	virtual void WaitForIdle();
+	void RunBuffer(CCommandBuffer *pBuffer) override;
+	void RunBufferSingleThreadedUnsafe(CCommandBuffer *pBuffer) override;
+	bool IsIdle() const override;
+	void WaitForIdle() override;
+
+	void ProcessError(const SGfxErrorContainer &Error);
 
 protected:
 	void StartProcessor(ICommandProcessor *pProcessor);
 	void StopProcessor();
 
+	bool HasWarning()
+	{
+		return m_Warning.m_WarningType != GFX_WARNING_TYPE_NONE;
+	}
+
 private:
 	ICommandProcessor *m_pProcessor;
+	std::atomic_bool m_Shutdown;
+#if !defined(CONF_PLATFORM_EMSCRIPTEN)
 	std::mutex m_BufferSwapMutex;
 	std::condition_variable m_BufferSwapCond;
 	CCommandBuffer *m_pBuffer;
-	std::atomic_bool m_Shutdown;
 	bool m_Started = false;
 	std::atomic_bool m_BufferInProcess;
 	void *m_pThread;
-
 	static void ThreadFunc(void *pUser);
+#endif
+
+public:
+	bool GetWarning(std::vector<std::string> &WarningStrings) override;
 };
 
 // takes care of implementation independent operations
@@ -116,8 +135,8 @@ struct SBackendCapabilites
 class CCommandProcessorFragment_SDL
 {
 	// SDL stuff
-	SDL_Window *m_pWindow;
-	SDL_GLContext m_GLContext;
+	SDL_Window *m_pWindow = nullptr;
+	SDL_GLContext m_GLContext = nullptr;
 
 public:
 	enum
@@ -154,35 +173,46 @@ public:
 	bool RunCommand(const CCommandBuffer::SCommand *pBaseCommand);
 };
 
-// command processor impelementation, uses the fragments to combine into one processor
+// command processor implementation, uses the fragments to combine into one processor
 class CCommandProcessor_SDL_GL : public CGraphicsBackend_Threaded::ICommandProcessor
 {
-	class CCommandProcessorFragment_GLBase *m_pGLBackend;
+	CCommandProcessorFragment_GLBase *m_pGLBackend;
 	CCommandProcessorFragment_SDL m_SDL;
 	CCommandProcessorFragment_General m_General;
 
 	EBackendType m_BackendType;
 
+	SGfxErrorContainer m_Error;
+	SGfxWarningContainer m_Warning;
+
 public:
 	CCommandProcessor_SDL_GL(EBackendType BackendType, int GLMajor, int GLMinor, int GLPatch);
 	virtual ~CCommandProcessor_SDL_GL();
-	virtual void RunBuffer(CCommandBuffer *pBuffer);
+	void RunBuffer(CCommandBuffer *pBuffer) override;
+
+	const SGfxErrorContainer &GetError() const override;
+	void ErroneousCleanup() override;
+
+	const SGfxWarningContainer &GetWarning() const override;
+
+	void HandleError();
+	void HandleWarning();
 };
 
-static constexpr size_t gs_GPUInfoStringSize = 256;
+static constexpr size_t gs_GpuInfoStringSize = 256;
 
 // graphics backend implemented with SDL and the graphics library @see EBackendType
 class CGraphicsBackend_SDL_GL : public CGraphicsBackend_Threaded
 {
-	SDL_Window *m_pWindow = NULL;
-	SDL_GLContext m_GLContext;
+	SDL_Window *m_pWindow = nullptr;
+	SDL_GLContext m_GLContext = nullptr;
 	ICommandProcessor *m_pProcessor = nullptr;
 	std::atomic<uint64_t> m_TextureMemoryUsage{0};
 	std::atomic<uint64_t> m_BufferMemoryUsage{0};
 	std::atomic<uint64_t> m_StreamMemoryUsage{0};
 	std::atomic<uint64_t> m_StagingMemoryUsage{0};
 
-	TTWGraphicsGPUList m_GPUList;
+	TTwGraphicsGpuList m_GpuList;
 
 	TGLBackendReadPresentedImageData m_ReadPresentedImageDataFunc;
 
@@ -190,9 +220,9 @@ class CGraphicsBackend_SDL_GL : public CGraphicsBackend_Threaded
 
 	SBackendCapabilites m_Capabilites;
 
-	char m_aVendorString[gs_GPUInfoStringSize] = {};
-	char m_aVersionString[gs_GPUInfoStringSize] = {};
-	char m_aRendererString[gs_GPUInfoStringSize] = {};
+	char m_aVendorString[gs_GpuInfoStringSize] = {};
+	char m_aVersionString[gs_GpuInfoStringSize] = {};
+	char m_aRendererString[gs_GpuInfoStringSize] = {};
 
 	EBackendType m_BackendType = BACKEND_TYPE_AUTO;
 
@@ -202,71 +232,76 @@ class CGraphicsBackend_SDL_GL : public CGraphicsBackend_Threaded
 	static void ClampDriverVersion(EBackendType BackendType);
 
 public:
-	CGraphicsBackend_SDL_GL();
-	virtual int Init(const char *pName, int *pScreen, int *pWidth, int *pHeight, int *pRefreshRate, int FsaaSamples, int Flags, int *pDesktopWidth, int *pDesktopHeight, int *pCurrentWidth, int *pCurrentHeight, class IStorage *pStorage);
-	virtual int Shutdown();
+	CGraphicsBackend_SDL_GL(TTranslateFunc &&TranslateFunc);
+	int Init(const char *pName, int *pScreen, int *pWidth, int *pHeight, int *pRefreshRate, int *pFsaaSamples, int Flags, int *pDesktopWidth, int *pDesktopHeight, int *pCurrentWidth, int *pCurrentHeight, class IStorage *pStorage) override;
+	int Shutdown() override;
 
-	virtual uint64_t TextureMemoryUsage() const;
-	virtual uint64_t BufferMemoryUsage() const;
-	virtual uint64_t StreamedMemoryUsage() const;
-	virtual uint64_t StagingMemoryUsage() const;
+	uint64_t TextureMemoryUsage() const override;
+	uint64_t BufferMemoryUsage() const override;
+	uint64_t StreamedMemoryUsage() const override;
+	uint64_t StagingMemoryUsage() const override;
 
-	virtual const TTWGraphicsGPUList &GetGPUs() const;
+	const TTwGraphicsGpuList &GetGpus() const override;
 
-	virtual int GetNumScreens() const { return m_NumScreens; }
+	int GetNumScreens() const override { return m_NumScreens; }
+	const char *GetScreenName(int Screen) const override;
 
-	virtual void GetVideoModes(CVideoMode *pModes, int MaxModes, int *pNumModes, int HiDPIScale, int MaxWindowWidth, int MaxWindowHeight, int ScreenID);
-	virtual void GetCurrentVideoMode(CVideoMode &CurMode, int HiDPIScale, int MaxWindowWidth, int MaxWindowHeight, int ScreenID);
+	void GetVideoModes(CVideoMode *pModes, int MaxModes, int *pNumModes, float HiDPIScale, int MaxWindowWidth, int MaxWindowHeight, int ScreenId) override;
+	void GetCurrentVideoMode(CVideoMode &CurMode, float HiDPIScale, int MaxWindowWidth, int MaxWindowHeight, int ScreenId) override;
 
-	virtual void Minimize();
-	virtual void Maximize();
-	virtual void SetWindowParams(int FullscreenMode, bool IsBorderless, bool AllowResizing);
-	virtual bool SetWindowScreen(int Index);
-	virtual bool UpdateDisplayMode(int Index);
-	virtual int GetWindowScreen();
-	virtual int WindowActive();
-	virtual int WindowOpen();
-	virtual void SetWindowGrab(bool Grab);
-	virtual bool ResizeWindow(int w, int h, int RefreshRate);
-	virtual void GetViewportSize(int &w, int &h);
-	virtual void NotifyWindow();
+	void Minimize() override;
+	void Maximize() override;
+	void SetWindowParams(int FullscreenMode, bool IsBorderless) override;
+	bool SetWindowScreen(int Index) override;
+	bool UpdateDisplayMode(int Index) override;
+	int GetWindowScreen() override;
+	int WindowActive() override;
+	int WindowOpen() override;
+	void SetWindowGrab(bool Grab) override;
+	bool ResizeWindow(int w, int h, int RefreshRate) override;
+	void GetViewportSize(int &w, int &h) override;
+	void NotifyWindow() override;
+	bool IsScreenKeyboardShown() override;
 
-	virtual void WindowDestroyNtf(uint32_t WindowID);
-	virtual void WindowCreateNtf(uint32_t WindowID);
+	void WindowDestroyNtf(uint32_t WindowId) override;
+	void WindowCreateNtf(uint32_t WindowId) override;
 
-	virtual bool GetDriverVersion(EGraphicsDriverAgeType DriverAgeType, int &Major, int &Minor, int &Patch, const char *&pName, EBackendType BackendType);
-	virtual bool IsConfigModernAPI() { return IsModernAPI(m_BackendType); }
-	virtual bool UseTrianglesAsQuad() { return m_Capabilites.m_TrianglesAsQuads; }
-	virtual bool HasTileBuffering() { return m_Capabilites.m_TileBuffering; }
-	virtual bool HasQuadBuffering() { return m_Capabilites.m_QuadBuffering; }
-	virtual bool HasTextBuffering() { return m_Capabilites.m_TextBuffering; }
-	virtual bool HasQuadContainerBuffering() { return m_Capabilites.m_QuadContainerBuffering; }
-	virtual bool Has2DTextureArrays() { return m_Capabilites.m_2DArrayTextures; }
+	bool GetDriverVersion(EGraphicsDriverAgeType DriverAgeType, int &Major, int &Minor, int &Patch, const char *&pName, EBackendType BackendType) override;
+	bool IsConfigModernAPI() override { return IsModernAPI(m_BackendType); }
+	bool UseTrianglesAsQuad() override { return m_Capabilites.m_TrianglesAsQuads; }
+	bool HasTileBuffering() override { return m_Capabilites.m_TileBuffering; }
+	bool HasQuadBuffering() override { return m_Capabilites.m_QuadBuffering; }
+	bool HasTextBuffering() override { return m_Capabilites.m_TextBuffering; }
+	bool HasQuadContainerBuffering() override { return m_Capabilites.m_QuadContainerBuffering; }
+	bool Uses2DTextureArrays() override { return m_Capabilites.m_2DArrayTextures; }
+	bool HasTextureArraysSupport() override { return m_Capabilites.m_2DArrayTextures || m_Capabilites.m_3DTextures; }
 
-	virtual const char *GetErrorString()
+	const char *GetErrorString() override
 	{
 		if(m_aErrorString[0] != '\0')
 			return m_aErrorString;
 
-		return NULL;
+		return nullptr;
 	}
 
-	virtual const char *GetVendorString()
+	const char *GetVendorString() override
 	{
 		return m_aVendorString;
 	}
 
-	virtual const char *GetVersionString()
+	const char *GetVersionString() override
 	{
 		return m_aVersionString;
 	}
 
-	virtual const char *GetRendererString()
+	const char *GetRendererString() override
 	{
 		return m_aRendererString;
 	}
 
-	virtual TGLBackendReadPresentedImageData &GetReadPresentedImageDataFuncUnsafe();
+	TGLBackendReadPresentedImageData &GetReadPresentedImageDataFuncUnsafe() override;
+
+	bool ShowMessageBox(unsigned Type, const char *pTitle, const char *pMsg) override;
 
 	static bool IsModernAPI(EBackendType BackendType);
 };

@@ -2,6 +2,52 @@
 
 #include <base/system.h>
 
+TEST(NetAddr, FromUrlStringInvalid)
+{
+	NETADDR Addr;
+
+	EXPECT_EQ(net_addr_from_url(&Addr, "tw-0.6+udp://127.0", nullptr, 0), -1); // invalid ip
+	EXPECT_EQ(net_addr_from_url(&Addr, "tw-0.6+udp://ddnet.org", nullptr, 0), -1); // invalid ip
+	EXPECT_EQ(net_addr_from_url(&Addr, "127.0.0.1", nullptr, 0), 1); // not a URL
+	EXPECT_EQ(net_addr_from_url(&Addr, "tw-0.9+udp://127.0.0.1", nullptr, 0), 1); // invalid tw protocol
+	EXPECT_EQ(net_addr_from_url(&Addr, "tw-0.6+tcp://127.0.0.1", nullptr, 0), 1); // invalid internet protocol
+}
+
+TEST(NetAddr, FromUrlStringValid)
+{
+	NETADDR Addr;
+	char aBuf1[NETADDR_MAXSTRSIZE];
+	char aBuf2[NETADDR_MAXSTRSIZE];
+
+	EXPECT_EQ(net_addr_from_url(&Addr, "tw-0.7+udp://127.0.0.1", nullptr, 0), 0);
+	net_addr_str(&Addr, aBuf1, sizeof(aBuf1), true);
+	net_addr_str(&Addr, aBuf2, sizeof(aBuf2), false);
+	EXPECT_STREQ(aBuf1, "127.0.0.1:0");
+	EXPECT_STREQ(aBuf2, "127.0.0.1");
+
+	EXPECT_EQ(net_addr_from_url(&Addr, "tw-0.6+udp://127.0.0.1", nullptr, 0), 0);
+	net_addr_str(&Addr, aBuf1, sizeof(aBuf1), true);
+	net_addr_str(&Addr, aBuf2, sizeof(aBuf2), false);
+	EXPECT_STREQ(aBuf1, "127.0.0.1:0");
+	EXPECT_STREQ(aBuf2, "127.0.0.1");
+
+	EXPECT_EQ(net_addr_from_url(&Addr, "tw-0.6+udp://127.0.0.1", nullptr, 0), 0);
+	net_addr_str(&Addr, aBuf1, sizeof(aBuf1), true);
+	net_addr_str(&Addr, aBuf2, sizeof(aBuf2), false);
+	EXPECT_STREQ(aBuf1, "127.0.0.1:0");
+	EXPECT_STREQ(aBuf2, "127.0.0.1");
+
+	EXPECT_EQ(net_addr_from_url(&Addr, "tw-0.6+udp://[0123:4567:89ab:cdef:1:2:3:4]:5678", nullptr, 0), 0);
+	net_addr_str(&Addr, aBuf1, sizeof(aBuf1), true);
+	net_addr_str(&Addr, aBuf2, sizeof(aBuf2), false);
+	EXPECT_STREQ(aBuf1, "[123:4567:89ab:cdef:1:2:3:4]:5678");
+	EXPECT_STREQ(aBuf2, "[123:4567:89ab:cdef:1:2:3:4]");
+
+	char aHost[128];
+	EXPECT_EQ(net_addr_from_url(&Addr, "tw-0.6+udp://ger10.ddnet.org:5678", aHost, sizeof(aHost)), -1);
+	EXPECT_STREQ(aHost, "ger10.ddnet.org:5678");
+}
+
 TEST(NetAddr, FromStr)
 {
 	NETADDR Addr;
@@ -86,4 +132,46 @@ TEST(NetAddr, FromStrInvalid)
 	EXPECT_TRUE(net_addr_from_str(&Addr, "[::]:"));
 	EXPECT_TRUE(net_addr_from_str(&Addr, "127.0.0.1:1a"));
 	EXPECT_TRUE(net_addr_from_str(&Addr, "[::]:c"));
+}
+
+TEST(NetAddrDeathTest, StrInvalid1)
+{
+	ASSERT_DEATH({
+		NETADDR Addr = {0};
+		char aBuf[NETADDR_MAXSTRSIZE];
+		net_addr_str(&Addr, aBuf, sizeof(aBuf), true);
+	},
+		"");
+}
+
+TEST(NetAddrDeathTest, StrInvalid2)
+{
+	ASSERT_DEATH({
+		NETADDR Addr = {0};
+		char aBuf[NETADDR_MAXSTRSIZE];
+		net_addr_str(&Addr, aBuf, sizeof(aBuf), false);
+	},
+		"");
+}
+
+TEST(NetAddr, IsLocal)
+{
+	NETADDR Addr;
+	net_addr_from_str(&Addr, "127.0.0.1");
+	EXPECT_TRUE(net_addr_is_local(&Addr));
+
+	net_addr_from_str(&Addr, "[::1]");
+	EXPECT_TRUE(net_addr_is_local(&Addr));
+
+	net_addr_from_str(&Addr, "192.168.1.1");
+	EXPECT_TRUE(net_addr_is_local(&Addr));
+
+	net_addr_from_str(&Addr, "10.0.0.1");
+	EXPECT_TRUE(net_addr_is_local(&Addr));
+
+	net_addr_from_str(&Addr, "8.8.8.8");
+	EXPECT_FALSE(net_addr_is_local(&Addr));
+
+	net_addr_from_str(&Addr, "[2001:db8::1]");
+	EXPECT_FALSE(net_addr_is_local(&Addr));
 }

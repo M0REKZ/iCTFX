@@ -3,7 +3,6 @@
 #ifndef GAME_CLIENT_PREDICTION_ENTITIES_PROJECTILE_H
 #define GAME_CLIENT_PREDICTION_ENTITIES_PROJECTILE_H
 
-#include "character.h"
 #include <game/client/prediction/entity.h>
 
 class CProjectileData;
@@ -23,7 +22,6 @@ public:
 		int Span,
 		bool Freeze,
 		bool Explosive,
-		float Force,
 		int SoundImpact,
 		int Layer = 0,
 		int Number = 0);
@@ -31,7 +29,7 @@ public:
 	vec2 GetPos(float Time);
 	CProjectileData GetData() const;
 
-	virtual void Tick();
+	void Tick() override;
 
 	bool Match(CProjectile *pProj);
 	void SetBouncing(int Value);
@@ -39,7 +37,7 @@ public:
 	const vec2 &GetDirection() { return m_Direction; }
 	const int &GetOwner() { return m_Owner; }
 	const int &GetStartTick() { return m_StartTick; }
-	CProjectile(CGameWorld *pGameWorld, int ID, CProjectileData *pProj, const CNetObj_EntityEx *pEntEx = 0);
+	CProjectile(CGameWorld *pGameWorld, int Id, const CProjectileData *pProj);
 
 private:
 	vec2 m_Direction;

@@ -14,13 +14,20 @@ def recursive_file_list(path):
 	return result
 
 IGNORE_FILES = [
-	"src/engine/client/keynames.h",
-	"src/engine/keys.h",
+]
+IGNORE_DIRS = [
+	"src/game/generated",
+	"src/rust-bridge"
 ]
 def filter_ignored(filenames):
-	return [filename for filename in filenames
-		if filename not in IGNORE_FILES
-		and not filename.startswith("src/game/generated/")]
+	result = []
+	for filename in filenames:
+		real_filename = os.path.realpath(filename)
+		if real_filename not in [os.path.realpath(ignore_file) for ignore_file in IGNORE_FILES] \
+			and not any(real_filename.startswith(os.path.realpath(subdir) + os.path.sep) for subdir in IGNORE_DIRS):
+			result.append(filename)
+
+	return result
 
 def filter_cpp(filenames):
 	return [filename for filename in filenames
@@ -29,24 +36,43 @@ def filter_cpp(filenames):
 def find_clang_format(version):
 	for binary in (
 		"clang-format",
-		"clang-format-{}".format(version),
-		"/opt/clang-format-static/clang-format-{}".format(version)):
+		f"clang-format-{version}",
+		f"/opt/clang-format-static/clang-format-{version}"):
 		try:
 			out = subprocess.check_output([binary, "--version"])
 		except FileNotFoundError:
 			continue
-		if "clang-format version {}.".format(version) in out.decode("utf-8"):
+		if f"clang-format version {version}." in out.decode("utf-8"):
 			return binary
-	print("Found no clang-format {}".format(version))
+	print(f"Found no clang-format {version}")
 	sys.exit(-1)
 
 clang_format_bin = find_clang_format(10)
 
 def reformat(filenames):
+	for filename in filenames:
+		with open(filename, 'r+b') as f:
+			try:
+				f.seek(-1, os.SEEK_END)
+				if f.read(1) != b'\n':
+					f.write(b'\n')
+			except OSError:
+				f.seek(0)
 	subprocess.check_call([clang_format_bin, "-i"] + filenames)
 
 def warn(filenames):
-	return subprocess.call([clang_format_bin, "-Werror", "--dry-run"] + filenames)
+	clang = subprocess.call([clang_format_bin, "-Werror", "--dry-run"] + filenames)
+	newline = 0
+	for filename in filenames:
+		with open(filename, 'rb') as f:
+			try:
+				f.seek(-1, os.SEEK_END)
+				if f.read(1) != b'\n':
+					print(filename + ": error: missing newline at EOF", file=sys.stderr)
+					newline = 1
+			except OSError:
+				f.seek(0)
+	return clang or newline
 
 def main():
 	p = argparse.ArgumentParser(description="Check and fix style of changed files")

@@ -7,7 +7,7 @@ enum
 	NUM_SOCKETS = 64
 };
 
-void Run(NETADDR Dest)
+static void Run(NETADDR Dest)
 {
 	NETSOCKET aSockets[NUM_SOCKETS];
 
@@ -33,9 +33,8 @@ void Run(NETADDR Dest)
 
 int main(int argc, const char **argv)
 {
-	cmdline_fix(&argc, &argv);
+	CCmdlineFix CmdlineFix(&argc, &argv);
 	NETADDR Dest = {NETTYPE_IPV4, {127, 0, 0, 1}, 8303};
 	Run(Dest);
-	cmdline_free(argc, argv);
 	return 0;
 }

@@ -57,9 +57,28 @@ bool IsValidTeleTile(int Index)
 		Index == TILE_TELECHECKINEVIL);
 }
 
+bool IsTeleTileCheckpoint(int Index)
+{
+	return Index == TILE_TELECHECK || Index == TILE_TELECHECKOUT;
+}
+
+bool IsTeleTileNumberUsed(int Index, bool Checkpoint)
+{
+	if(Checkpoint)
+		return IsTeleTileCheckpoint(Index);
+	return !IsTeleTileCheckpoint(Index) && Index != TILE_TELECHECKIN &&
+	       Index != TILE_TELECHECKINEVIL;
+}
+
+bool IsTeleTileNumberUsedAny(int Index)
+{
+	return Index != TILE_TELECHECKIN &&
+	       Index != TILE_TELECHECKINEVIL;
+}
+
 bool IsValidSpeedupTile(int Index)
 {
-	return Index == TILE_BOOST;
+	return Index == TILE_SPEED_BOOST_OLD || Index == TILE_SPEED_BOOST;
 }
 
 bool IsValidSwitchTile(int Index)
@@ -81,6 +100,28 @@ bool IsValidSwitchTile(int Index)
 		(IsValidEntity(Index) && Index >= ENTITY_OFFSET + ENTITY_ARMOR_1));
 }
 
+bool IsSwitchTileFlagsUsed(int Index)
+{
+	return Index != TILE_FREEZE &&
+	       Index != TILE_DFREEZE &&
+	       Index != TILE_DUNFREEZE;
+}
+
+bool IsSwitchTileNumberUsed(int Index)
+{
+	return Index != TILE_JUMP &&
+	       Index != TILE_HIT_ENABLE &&
+	       Index != TILE_HIT_DISABLE &&
+	       Index != TILE_ALLOW_TELE_GUN &&
+	       Index != TILE_ALLOW_BLUE_TELE_GUN;
+}
+
+bool IsSwitchTileDelayUsed(int Index)
+{
+	return Index != TILE_DFREEZE &&
+	       Index != TILE_DUNFREEZE;
+}
+
 bool IsValidTuneTile(int Index)
 {
 	return Index == TILE_TUNE;
@@ -91,7 +132,7 @@ bool IsValidEntity(int Index)
 	Index -= ENTITY_OFFSET;
 	return (
 		(Index >= ENTITY_SPAWN && Index <= ENTITY_LASER_O_FAST) ||
-		(Index >= ENTITY_PLASMAE && Index <= ENTITY_CRAZY_SHOTGUN) ||
+		(Index >= ENTITY_PLASMAE && Index <= ENTITY_ARMOR_LASER) ||
 		(Index >= ENTITY_DRAGGER_WEAK && Index <= ENTITY_DRAGGER_STRONG_NW) ||
 		Index == ENTITY_DOOR);
 }
@@ -107,7 +148,9 @@ bool IsRotatableTile(int Index)
 		Index == TILE_ENTITIES_OFF_1 ||
 		Index == TILE_ENTITIES_OFF_2 ||
 		Index - ENTITY_OFFSET == ENTITY_CRAZY_SHOTGUN_EX ||
-		Index - ENTITY_OFFSET == ENTITY_CRAZY_SHOTGUN);
+		Index - ENTITY_OFFSET == ENTITY_CRAZY_SHOTGUN ||
+		(Index - ENTITY_OFFSET >= ENTITY_ARMOR_1 && Index - ENTITY_OFFSET <= ENTITY_WEAPON_LASER) ||
+		(Index - ENTITY_OFFSET >= ENTITY_ARMOR_SHOTGUN && Index - ENTITY_OFFSET <= ENTITY_ARMOR_LASER));
 }
 
 bool IsCreditsTile(int TileIndex)
@@ -121,4 +164,14 @@ bool IsCreditsTile(int TileIndex)
 		(TILE_CREDITS_6 == TileIndex) ||
 		(TILE_CREDITS_7 == TileIndex) ||
 		(TILE_CREDITS_8 == TileIndex));
+}
+
+int PackColor(CColor Color)
+{
+	int Res = 0;
+	Res |= Color.r << 24;
+	Res |= Color.g << 16;
+	Res |= Color.b << 8;
+	Res |= Color.a;
+	return Res;
 }

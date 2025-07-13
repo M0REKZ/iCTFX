@@ -4,9 +4,11 @@
 #define ENGINE_SHARED_CONSOLE_H
 
 #include "memheap.h"
-#include <base/math.h>
+
 #include <engine/console.h>
 #include <engine/storage.h>
+
+#include <vector>
 
 class CConsole : public IConsole
 {
@@ -19,9 +21,9 @@ class CConsole : public IConsole
 		FCommandCallback m_pfnCallback;
 		void *m_pUserData;
 
-		virtual const CCommandInfo *NextCommandInfo(int AccessLevel, int FlagMask) const;
+		const CCommandInfo *NextCommandInfo(int AccessLevel, int FlagMask) const override;
 
-		void SetAccessLevel(int AccessLevel) { m_AccessLevel = clamp(AccessLevel, (int)(ACCESS_LEVEL_ADMIN), (int)(ACCESS_LEVEL_USER)); }
+		void SetAccessLevel(int AccessLevel);
 	};
 
 	class CChain
@@ -46,33 +48,27 @@ class CConsole : public IConsole
 	};
 
 	CExecFile *m_pFirstExec;
-	class CConfig *m_pConfig;
-	class IStorage *m_pStorage;
+	IStorage *m_pStorage;
 	int m_AccessLevel;
 
 	CCommand *m_pRecycleList;
 	CHeap m_TempCommands;
 
+	static void TraverseChain(FCommandCallback *ppfnCallback, void **ppUserData);
+
 	static void Con_Chain(IResult *pResult, void *pUserData);
 	static void Con_Echo(IResult *pResult, void *pUserData);
 	static void Con_Exec(IResult *pResult, void *pUserData);
-	static void ConToggle(IResult *pResult, void *pUser);
-	static void ConToggleStroke(IResult *pResult, void *pUser);
 	static void ConCommandAccess(IResult *pResult, void *pUser);
 	static void ConCommandStatus(IConsole::IResult *pResult, void *pUser);
 
-	void ExecuteLineStroked(int Stroke, const char *pStr, int ClientID = -1, bool InterpretSemicolons = true);
-
-	struct
-	{
-		int m_OutputLevel;
-		FPrintCallback m_pfnPrintCallback;
-		void *m_pPrintCallbackUserdata;
-	} m_aPrintCB[MAX_PRINT_CB];
-	int m_NumPrintCB;
+	void ExecuteLineStroked(int Stroke, const char *pStr, int ClientId = -1, bool InterpretSemicolons = true) override;
 
 	FTeeHistorianCommandCallback m_pfnTeeHistorianCommandCallback;
 	void *m_pTeeHistorianCommandUserdata;
+
+	FUnknownCommandCallback m_pfnUnknownCommandCallback = EmptyUnknownCommandCallback;
+	void *m_pUnknownCommandUserdata = nullptr;
 
 	enum
 	{
@@ -89,47 +85,16 @@ class CConsole : public IConsole
 		const char *m_pCommand;
 		const char *m_apArgs[MAX_PARTS];
 
-		CResult()
+		CResult(int ClientId);
+		CResult(const CResult &Other);
 
-		{
-			mem_zero(m_aStringStorage, sizeof(m_aStringStorage));
-			m_pArgsStart = 0;
-			m_pCommand = 0;
-			mem_zero(m_apArgs, sizeof(m_apArgs));
-		}
+		void AddArgument(const char *pArg);
+		void RemoveArgument(unsigned Index) override;
 
-		CResult &operator=(const CResult &Other)
-		{
-			if(this != &Other)
-			{
-				IResult::operator=(Other);
-				mem_copy(m_aStringStorage, Other.m_aStringStorage, sizeof(m_aStringStorage));
-				m_pArgsStart = m_aStringStorage + (Other.m_pArgsStart - Other.m_aStringStorage);
-				m_pCommand = m_aStringStorage + (Other.m_pCommand - Other.m_aStringStorage);
-				for(unsigned i = 0; i < Other.m_NumArgs; ++i)
-					m_apArgs[i] = m_aStringStorage + (Other.m_apArgs[i] - Other.m_aStringStorage);
-			}
-			return *this;
-		}
-
-		void AddArgument(const char *pArg)
-		{
-			m_apArgs[m_NumArgs++] = pArg;
-		}
-
-		virtual const char *GetString(unsigned Index);
-		virtual int GetInteger(unsigned Index);
-		virtual float GetFloat(unsigned Index);
-		virtual ColorHSLA GetColor(unsigned Index, bool Light);
-
-		virtual void RemoveArgument(unsigned Index)
-		{
-			dbg_assert(Index < m_NumArgs, "invalid argument index");
-			for(unsigned i = Index; i < m_NumArgs - 1; i++)
-				m_apArgs[i] = m_apArgs[i + 1];
-
-			m_apArgs[m_NumArgs--] = 0;
-		}
+		const char *GetString(unsigned Index) const override;
+		int GetInteger(unsigned Index) const override;
+		float GetFloat(unsigned Index) const override;
+		std::optional<ColorHSLA> GetColor(unsigned Index, float DarkestLighting) const override;
 
 		// DDRace
 
@@ -142,14 +107,23 @@ class CConsole : public IConsole
 
 		int m_Victim;
 		void ResetVictim();
-		bool HasVictim();
+		bool HasVictim() const;
 		void SetVictim(int Victim);
 		void SetVictim(const char *pVictim);
-		virtual int GetVictim();
+		int GetVictim() const override;
 	};
 
 	int ParseStart(CResult *pResult, const char *pString, int Length);
-	int ParseArgs(CResult *pResult, const char *pFormat);
+
+	enum
+	{
+		PARSEARGS_OK = 0,
+		PARSEARGS_MISSING_VALUE,
+		PARSEARGS_INVALID_INTEGER,
+		PARSEARGS_INVALID_FLOAT,
+	};
+
+	int ParseArgs(CResult *pResult, const char *pFormat, bool IsColor = false);
 
 	/*
 	this function will set pFormat to the next parameter (i,s,r,v,?) it contains and
@@ -159,77 +133,61 @@ class CConsole : public IConsole
 	*/
 	char NextParam(const char *&pFormat);
 
-	class CExecutionQueue
+	class CExecutionQueueEntry
 	{
-		CHeap m_Queue;
-
 	public:
-		struct CQueueEntry
-		{
-			CQueueEntry *m_pNext;
-			FCommandCallback m_pfnCommandCallback;
-			void *m_pCommandUserData;
-			CResult m_Result;
-		} * m_pFirst, *m_pLast;
-
-		void AddEntry()
-		{
-			CQueueEntry *pEntry = static_cast<CQueueEntry *>(m_Queue.Allocate(sizeof(CQueueEntry)));
-			pEntry->m_pNext = 0;
-			if(!m_pFirst)
-				m_pFirst = pEntry;
-			if(m_pLast)
-				m_pLast->m_pNext = pEntry;
-			m_pLast = pEntry;
-			(void)new(&(pEntry->m_Result)) CResult;
-		}
-		void Reset()
-		{
-			m_Queue.Reset();
-			m_pFirst = m_pLast = 0;
-		}
-	} m_ExecutionQueue;
+		CCommand *m_pCommand;
+		CResult m_Result;
+		CExecutionQueueEntry(CCommand *pCommand, const CResult &Result) :
+			m_pCommand(pCommand),
+			m_Result(Result) {}
+	};
+	std::vector<CExecutionQueueEntry> m_vExecutionQueue;
 
 	void AddCommandSorted(CCommand *pCommand);
 	CCommand *FindCommand(const char *pName, int FlagMask);
 
-public:
-	CConfig *Config() { return m_pConfig; }
+	bool m_Cheated;
 
+public:
 	CConsole(int FlagMask);
 	~CConsole();
 
-	virtual void Init();
-	virtual const CCommandInfo *FirstCommandInfo(int AccessLevel, int FlagMask) const;
-	virtual const CCommandInfo *GetCommandInfo(const char *pName, int FlagMask, bool Temp);
-	virtual void PossibleCommands(const char *pStr, int FlagMask, bool Temp, FPossibleCallback pfnCallback, void *pUser);
+	void Init() override;
+	const CCommandInfo *FirstCommandInfo(int AccessLevel, int FlagMask) const override;
+	const CCommandInfo *GetCommandInfo(const char *pName, int FlagMask, bool Temp) override;
+	int PossibleCommands(const char *pStr, int FlagMask, bool Temp, FPossibleCallback pfnCallback, void *pUser) override;
 
-	virtual void ParseArguments(int NumArgs, const char **ppArguments);
-	virtual void Register(const char *pName, const char *pParams, int Flags, FCommandCallback pfnFunc, void *pUser, const char *pHelp);
-	virtual void RegisterTemp(const char *pName, const char *pParams, int Flags, const char *pHelp);
-	virtual void DeregisterTemp(const char *pName);
-	virtual void DeregisterTempAll();
-	virtual void Chain(const char *pName, FChainCommandCallback pfnChainFunc, void *pUser);
-	virtual void StoreCommands(bool Store);
+	void ParseArguments(int NumArgs, const char **ppArguments) override;
+	void Register(const char *pName, const char *pParams, int Flags, FCommandCallback pfnFunc, void *pUser, const char *pHelp) override;
+	void RegisterTemp(const char *pName, const char *pParams, int Flags, const char *pHelp) override;
+	void DeregisterTemp(const char *pName) override;
+	void DeregisterTempAll() override;
+	void Chain(const char *pName, FChainCommandCallback pfnChainFunc, void *pUser) override;
+	void StoreCommands(bool Store) override;
 
-	virtual bool LineIsValid(const char *pStr);
-	virtual void ExecuteLine(const char *pStr, int ClientID = -1, bool InterpretSemicolons = true);
-	virtual void ExecuteLineFlag(const char *pStr, int FlagMask, int ClientID = -1, bool InterpretSemicolons = true);
-	virtual void ExecuteFile(const char *pFilename, int ClientID = -1, bool LogFailure = false, int StorageType = IStorage::TYPE_ALL);
+	bool LineIsValid(const char *pStr) override;
+	void ExecuteLine(const char *pStr, int ClientId = -1, bool InterpretSemicolons = true) override;
+	void ExecuteLineFlag(const char *pStr, int FlagMask, int ClientId = -1, bool InterpretSemicolons = true) override;
+	bool ExecuteFile(const char *pFilename, int ClientId = -1, bool LogFailure = false, int StorageType = IStorage::TYPE_ALL) override;
 
-	virtual int RegisterPrintCallback(int OutputLevel, FPrintCallback pfnPrintCallback, void *pUserData);
-	virtual void SetPrintOutputLevel(int Index, int OutputLevel);
-	virtual char *Format(char *pBuf, int Size, const char *pFrom, const char *pStr);
-	virtual void Print(int Level, const char *pFrom, const char *pStr, ColorRGBA PrintColor = gs_ConsoleDefaultColor);
-	virtual void SetTeeHistorianCommandCallback(FTeeHistorianCommandCallback pfnCallback, void *pUser);
-	virtual void InitChecksum(CChecksumData *pData) const;
+	void Print(int Level, const char *pFrom, const char *pStr, ColorRGBA PrintColor = gs_ConsoleDefaultColor) const override;
+	void SetTeeHistorianCommandCallback(FTeeHistorianCommandCallback pfnCallback, void *pUser) override;
+	void SetUnknownCommandCallback(FUnknownCommandCallback pfnCallback, void *pUser) override;
+	void InitChecksum(CChecksumData *pData) const override;
 
-	void SetAccessLevel(int AccessLevel) { m_AccessLevel = clamp(AccessLevel, (int)(ACCESS_LEVEL_ADMIN), (int)(ACCESS_LEVEL_USER)); }
-	void ResetServerGameSettings();
+	void SetAccessLevel(int AccessLevel) override;
+
+	static std::optional<ColorHSLA> ColorParse(const char *pStr, float DarkestLighting);
+
 	// DDRace
 
 	static void ConUserCommandStatus(IConsole::IResult *pResult, void *pUser);
-	void SetFlagMask(int FlagMask) { m_FlagMask = FlagMask; }
+
+	bool Cheated() const override { return m_Cheated; }
+
+	int FlagMask() const override { return m_FlagMask; }
+	void SetFlagMask(int FlagMask) override { m_FlagMask = FlagMask; }
 };
 
 #endif

@@ -11,53 +11,50 @@ class CSqliteConnection : public IDbConnection
 {
 public:
 	CSqliteConnection(const char *pFilename, bool Setup);
-	virtual ~CSqliteConnection();
-	virtual void Print(IConsole *pConsole, const char *Mode);
+	~CSqliteConnection() override;
+	void Print(IConsole *pConsole, const char *pMode) override;
 
-	virtual CSqliteConnection *Copy();
-
-	virtual const char *BinaryCollate() const { return "BINARY"; }
-	virtual void ToUnixTimestamp(const char *pTimestamp, char *aBuf, unsigned int BufferSize);
-	virtual const char *InsertTimestampAsUtc() const { return "DATETIME(?, 'utc')"; }
-	virtual const char *CollateNocase() const { return "? COLLATE NOCASE"; }
-	virtual const char *InsertIgnore() const { return "INSERT OR IGNORE"; }
-	virtual const char *Random() const { return "RANDOM()"; }
-	virtual const char *MedianMapTime(char *pBuffer, int BufferSize) const;
+	const char *BinaryCollate() const override { return "BINARY"; }
+	void ToUnixTimestamp(const char *pTimestamp, char *aBuf, unsigned int BufferSize) override;
+	const char *InsertTimestampAsUtc() const override { return "DATETIME(?, 'utc')"; }
+	const char *CollateNocase() const override { return "? COLLATE NOCASE"; }
+	const char *InsertIgnore() const override { return "INSERT OR IGNORE"; }
+	const char *Random() const override { return "RANDOM()"; }
+	const char *MedianMapTime(char *pBuffer, int BufferSize) const override;
 	// Since SQLite 3.23.0 true/false literals are recognized, but still cleaner to use 1/0, because:
 	// > For compatibility, if there exist columns named "true" or "false", then
 	// > the identifiers refer to the columns rather than Boolean constants.
-	virtual const char *False() const { return "0"; }
-	virtual const char *True() const { return "1"; }
+	const char *False() const override { return "0"; }
+	const char *True() const override { return "1"; }
 
-	virtual bool Connect(char *pError, int ErrorSize);
-	virtual void Disconnect();
+	bool Connect(char *pError, int ErrorSize) override;
+	void Disconnect() override;
 
-	virtual bool PrepareStatement(const char *pStmt, char *pError, int ErrorSize);
+	bool PrepareStatement(const char *pStmt, char *pError, int ErrorSize) override;
 
-	virtual void BindString(int Idx, const char *pString);
-	virtual void BindBlob(int Idx, unsigned char *pBlob, int Size);
-	virtual void BindInt(int Idx, int Value);
-	virtual void BindInt64(int Idx, int64_t Value);
-	virtual void BindFloat(int Idx, float Value);
+	void BindString(int Idx, const char *pString) override;
+	void BindBlob(int Idx, unsigned char *pBlob, int Size) override;
+	void BindInt(int Idx, int Value) override;
+	void BindInt64(int Idx, int64_t Value) override;
+	void BindFloat(int Idx, float Value) override;
+	void BindNull(int Idx) override;
 
-	virtual void Print();
-	virtual bool Step(bool *pEnd, char *pError, int ErrorSize);
-	virtual bool ExecuteUpdate(int *pNumUpdated, char *pError, int ErrorSize);
+	void Print() override;
+	bool Step(bool *pEnd, char *pError, int ErrorSize) override;
+	bool ExecuteUpdate(int *pNumUpdated, char *pError, int ErrorSize) override;
 
-	virtual bool IsNull(int Col);
-	virtual float GetFloat(int Col);
-	virtual int GetInt(int Col);
-	virtual int64_t GetInt64(int Col);
-	virtual void GetString(int Col, char *pBuffer, int BufferSize);
+	bool IsNull(int Col) override;
+	float GetFloat(int Col) override;
+	int GetInt(int Col) override;
+	int64_t GetInt64(int Col) override;
+	void GetString(int Col, char *pBuffer, int BufferSize) override;
 	// passing a negative buffer size is undefined behavior
-	virtual int GetBlob(int Col, unsigned char *pBuffer, int BufferSize);
+	int GetBlob(int Col, unsigned char *pBuffer, int BufferSize) override;
 
-	virtual bool AddStats(char const* pPlayer, Stats const& stats, char *pError, int ErrorSize);
-	virtual bool GetStats(char const* pPlayer, Stats& stats, char *pError, int ErrorSize);
-	virtual bool AddServerStats(char const* pServer, ServerStats const& stats, char *pError, int ErrorSize);
-	virtual bool GetServerStats(char const* pServer, ServerStats& stats, char *pError, int ErrorSize);
-	virtual bool GetTop5(std::vector<PlayerWithScore> &stats, char* pError, int ErrorSize);
-	virtual bool GetRank(char const* pPlayer, int &rank, char *pError, int ErrorSize);
+	bool AddPoints(const char *pPlayer, int Points, char *pError, int ErrorSize) override;
+
+	// fail safe
+	bool CreateFailsafeTables();
 
 private:
 	// copy of config vars
@@ -69,6 +66,8 @@ private:
 	bool m_Done; // no more rows available for Step
 	// returns false, if the query succeeded
 	bool Execute(const char *pQuery, char *pError, int ErrorSize);
+	// returns true on failure
+	bool ConnectImpl(char *pError, int ErrorSize);
 
 	// returns true if an error was formatted
 	bool FormatError(int Result, char *pError, int ErrorSize);
@@ -85,7 +84,7 @@ CSqliteConnection::CSqliteConnection(const char *pFilename, bool Setup) :
 	m_Done(true),
 	m_InUse(false)
 {
-	str_copy(m_aFilename, pFilename, sizeof(m_aFilename));
+	str_copy(m_aFilename, pFilename);
 }
 
 CSqliteConnection::~CSqliteConnection()
@@ -96,12 +95,12 @@ CSqliteConnection::~CSqliteConnection()
 	m_pDb = nullptr;
 }
 
-void CSqliteConnection::Print(IConsole *pConsole, const char *Mode)
+void CSqliteConnection::Print(IConsole *pConsole, const char *pMode)
 {
 	char aBuf[512];
 	str_format(aBuf, sizeof(aBuf),
 		"SQLite-%s: DB: '%s'",
-		Mode, m_aFilename);
+		pMode, m_aFilename);
 	pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "server", aBuf);
 }
 
@@ -110,21 +109,25 @@ void CSqliteConnection::ToUnixTimestamp(const char *pTimestamp, char *aBuf, unsi
 	str_format(aBuf, BufferSize, "strftime('%%s', %s)", pTimestamp);
 }
 
-CSqliteConnection *CSqliteConnection::Copy()
-{
-	return new CSqliteConnection(m_aFilename, m_Setup);
-}
-
 bool CSqliteConnection::Connect(char *pError, int ErrorSize)
 {
 	if(m_InUse.exchange(true))
 	{
-		dbg_assert(0, "Tried connecting while the connection is in use");
+		dbg_assert(false, "Tried connecting while the connection is in use");
 	}
+	if(!ConnectImpl(pError, ErrorSize))
+	{
+		m_InUse.store(false);
+		return false;
+	}
+	return true;
+}
 
+bool CSqliteConnection::ConnectImpl(char *pError, int ErrorSize)
+{
 	if(m_pDb != nullptr)
 	{
-		return false;
+		return true;
 	}
 
 	if(sqlite3_libversion_number() < 3025000)
@@ -136,7 +139,7 @@ bool CSqliteConnection::Connect(char *pError, int ErrorSize)
 	if(Result != SQLITE_OK)
 	{
 		str_format(pError, ErrorSize, "Can't open sqlite database: '%s'", sqlite3_errmsg(m_pDb));
-		return true;
+		return false;
 	}
 
 	// wait for database to unlock so we don't have to handle SQLITE_BUSY errors
@@ -144,16 +147,37 @@ bool CSqliteConnection::Connect(char *pError, int ErrorSize)
 
 	if(m_Setup)
 	{
+		if(!Execute("PRAGMA journal_mode=WAL", pError, ErrorSize))
+			return false;
 		char aBuf[1024];
-		FormatCreateUsers(aBuf, sizeof(aBuf));
-		if(Execute(aBuf, pError, ErrorSize))
-			return true;
-		FormatCreateServer(aBuf, sizeof(aBuf));
-		if(Execute(aBuf, pError, ErrorSize))
-			return true;
+		FormatCreateRace(aBuf, sizeof(aBuf), /* Backup */ false);
+		if(!Execute(aBuf, pError, ErrorSize))
+			return false;
+		FormatCreateTeamrace(aBuf, sizeof(aBuf), "BLOB", /* Backup */ false);
+		if(!Execute(aBuf, pError, ErrorSize))
+			return false;
+		FormatCreateMaps(aBuf, sizeof(aBuf));
+		if(!Execute(aBuf, pError, ErrorSize))
+			return false;
+		FormatCreateSaves(aBuf, sizeof(aBuf), /* Backup */ false);
+		if(!Execute(aBuf, pError, ErrorSize))
+			return false;
+		FormatCreatePoints(aBuf, sizeof(aBuf));
+		if(!Execute(aBuf, pError, ErrorSize))
+			return false;
+
+		FormatCreateRace(aBuf, sizeof(aBuf), /* Backup */ true);
+		if(!Execute(aBuf, pError, ErrorSize))
+			return false;
+		FormatCreateTeamrace(aBuf, sizeof(aBuf), "BLOB", /* Backup */ true);
+		if(!Execute(aBuf, pError, ErrorSize))
+			return false;
+		FormatCreateSaves(aBuf, sizeof(aBuf), /* Backup */ true);
+		if(!Execute(aBuf, pError, ErrorSize))
+			return false;
 		m_Setup = false;
 	}
-	return false;
+	return true;
 }
 
 void CSqliteConnection::Disconnect()
@@ -174,25 +198,25 @@ bool CSqliteConnection::PrepareStatement(const char *pStmt, char *pError, int Er
 		pStmt,
 		-1, // pStmt can be any length
 		&m_pStmt,
-		NULL);
+		nullptr);
 	if(FormatError(Result, pError, ErrorSize))
 	{
-		return true;
+		return false;
 	}
 	m_Done = false;
-	return false;
+	return true;
 }
 
 void CSqliteConnection::BindString(int Idx, const char *pString)
 {
-	int Result = sqlite3_bind_text(m_pStmt, Idx, pString, -1, NULL);
+	int Result = sqlite3_bind_text(m_pStmt, Idx, pString, -1, nullptr);
 	AssertNoError(Result);
 	m_Done = false;
 }
 
 void CSqliteConnection::BindBlob(int Idx, unsigned char *pBlob, int Size)
 {
-	int Result = sqlite3_bind_blob(m_pStmt, Idx, pBlob, Size, NULL);
+	int Result = sqlite3_bind_blob(m_pStmt, Idx, pBlob, Size, nullptr);
 	AssertNoError(Result);
 	m_Done = false;
 }
@@ -214,6 +238,13 @@ void CSqliteConnection::BindInt64(int Idx, int64_t Value)
 void CSqliteConnection::BindFloat(int Idx, float Value)
 {
 	int Result = sqlite3_bind_double(m_pStmt, Idx, (double)Value);
+	AssertNoError(Result);
+	m_Done = false;
+}
+
+void CSqliteConnection::BindNull(int Idx)
+{
+	int Result = sqlite3_bind_null(m_pStmt, Idx);
 	AssertNoError(Result);
 	m_Done = false;
 }
@@ -243,40 +274,40 @@ bool CSqliteConnection::Step(bool *pEnd, char *pError, int ErrorSize)
 	if(m_Done)
 	{
 		*pEnd = true;
-		return false;
+		return true;
 	}
 	int Result = sqlite3_step(m_pStmt);
 	if(Result == SQLITE_ROW)
 	{
 		*pEnd = false;
-		return false;
+		return true;
 	}
 	else if(Result == SQLITE_DONE)
 	{
 		m_Done = true;
 		*pEnd = true;
-		return false;
+		return true;
 	}
 	else
 	{
 		if(FormatError(Result, pError, ErrorSize))
 		{
-			return true;
+			return false;
 		}
 	}
 	*pEnd = true;
-	return false;
+	return true;
 }
 
 bool CSqliteConnection::ExecuteUpdate(int *pNumUpdated, char *pError, int ErrorSize)
 {
 	bool End;
-	if(Step(&End, pError, ErrorSize))
+	if(!Step(&End, pError, ErrorSize))
 	{
-		return true;
+		return false;
 	}
 	*pNumUpdated = sqlite3_changes(m_pDb);
-	return false;
+	return true;
 }
 
 bool CSqliteConnection::IsNull(int Col)
@@ -332,14 +363,14 @@ const char *CSqliteConnection::MedianMapTime(char *pBuffer, int BufferSize) cons
 bool CSqliteConnection::Execute(const char *pQuery, char *pError, int ErrorSize)
 {
 	char *pErrorMsg;
-	int Result = sqlite3_exec(m_pDb, pQuery, NULL, NULL, &pErrorMsg);
+	int Result = sqlite3_exec(m_pDb, pQuery, nullptr, nullptr, &pErrorMsg);
 	if(Result != SQLITE_OK)
 	{
 		str_format(pError, ErrorSize, "error executing query: '%s'", pErrorMsg);
 		sqlite3_free(pErrorMsg);
-		return true;
+		return false;
 	}
-	return false;
+	return true;
 }
 
 bool CSqliteConnection::FormatError(int Result, char *pError, int ErrorSize)
@@ -364,53 +395,24 @@ void CSqliteConnection::AssertNoError(int Result)
 
 bool CSqliteConnection::AddStats(char const* pPlayer, Stats const& stats, char *pError, int ErrorSize)
 {
-	// char aBuf[512];
-	// str_format(aBuf, sizeof(aBuf),
-	// 	"INSERT INTO %s_points(Name, Points) "
-	// 	"VALUES (?, ?) "
-	// 	"ON CONFLICT(Name) DO UPDATE SET Points=Points+?",
-	// 	GetPrefix());
-	// if(PrepareStatement(aBuf, pError, ErrorSize))
-	// {
-	// 	return true;
-	// }
-	// BindString(1, pPlayer);
-	// BindInt(2, Points);
-	// BindInt(3, Points);
-	// bool End;
-	// return Step(&End, pError, ErrorSize);
-	str_copy(pError, "not implemented", ErrorSize);
-	return true;
-}
-
-
-bool CSqliteConnection::GetStats(char const* pPlayer, Stats& stats, char *pError, int ErrorSize) {
-	str_copy(pError, "not implemented", ErrorSize);
-	return true;
-}
-
-bool CSqliteConnection::AddServerStats(char const* pServer, ServerStats const& stats, char *pError, int ErrorSize) {
-	str_copy(pError, "not implemented", ErrorSize);
-	return true;
-}
-
-bool CSqliteConnection::GetServerStats(char const* pServer, ServerStats& stats, char *pError, int ErrorSize) {
-	str_copy(pError, "not implemented", ErrorSize);
-	return true;
-}
-
-
-bool CSqliteConnection::GetTop5(std::vector<PlayerWithScore> &stats, char* pError, int ErrorSize) {
-	str_copy(pError, "not implemented", ErrorSize);
-	return true;
-}
-
-bool CSqliteConnection::GetRank(char const* pPlayer, int &rank, char *pError, int ErrorSize) {
-	str_copy(pError, "not implemented", ErrorSize);
-	return true;
+	char aBuf[512];
+	str_format(aBuf, sizeof(aBuf),
+		"INSERT INTO %s_points(Name, Points) "
+		"VALUES (?, ?) "
+		"ON CONFLICT(Name) DO UPDATE SET Points=Points+?",
+		GetPrefix());
+	if(!PrepareStatement(aBuf, pError, ErrorSize))
+	{
+		return false;
+	}
+	BindString(1, pPlayer);
+	BindInt(2, Points);
+	BindInt(3, Points);
+	bool End;
+	return Step(&End, pError, ErrorSize);
 }
 
 std::unique_ptr<IDbConnection> CreateSqliteConnection(const char *pFilename, bool Setup)
 {
-	return std::unique_ptr<IDbConnection>(new CSqliteConnection(pFilename, Setup));
+	return std::make_unique<CSqliteConnection>(pFilename, Setup);
 }

@@ -3,20 +3,24 @@
 #ifndef GAME_SERVER_PLAYER_H
 #define GAME_SERVER_PLAYER_H
 
-#include "alloc.h"
+#include <base/vmath.h>
+#include <engine/shared/protocol.h>
+#include <game/alloc.h>
+#include <game/server/save.h>
 
-// this include should perhaps be removed
 #include "teeinfo.h"
 #include <game/server/gamecontext.h>
 
 #include <atomic>
 
-enum
-{
-	WEAPON_GAME = -3, // team switching etc
-	WEAPON_SELF = -2, // console kill command
-	WEAPON_WORLD = -1, // death tiles etc
-};
+#include <memory>
+#include <optional>
+
+class CCharacter;
+class CGameContext;
+class IServer;
+struct CNetObj_PlayerInput;
+struct CScorePlayerResult;
 
 #ifndef POSITION_HISTORY
 	#define POSITION_HISTORY 50
@@ -28,7 +32,7 @@ class CPlayer
 	MACRO_ALLOC_POOL_ID()
 
 public:
-	CPlayer(CGameContext *pGameServer, int ClientID, int Team);
+	CPlayer(CGameContext *pGameServer, uint32_t UniqueClientId, int ClientId, int Team);
 	~CPlayer();
 
 	void Reset();
@@ -38,7 +42,8 @@ public:
 	CCharacter *ForceSpawn(vec2 Pos); // required for loading savegames
 	void SetTeam(int Team, bool DoChatMsg = true);
 	int GetTeam() const { return m_Team; }
-	int GetCID() const { return m_ClientID; }
+	int GetCid() const { return m_ClientId; }
+	uint32_t GetUniqueCid() const { return m_UniqueClientId; }
 	int GetClientVersion() const;
 	bool SetTimerType(int TimerType);
 
@@ -50,13 +55,14 @@ public:
 	void Snap(int SnappingClient);
 	void FakeSnap();
 
-	void OnDirectInput(CNetObj_PlayerInput *NewInput);
-	void OnPredictedInput(CNetObj_PlayerInput *NewInput);
-	void OnPredictedEarlyInput(CNetObj_PlayerInput *NewInput);
+	void OnDirectInput(CNetObj_PlayerInput *pNewInput);
+	void OnPredictedInput(CNetObj_PlayerInput *pNewInput);
+	void OnPredictedEarlyInput(CNetObj_PlayerInput *pNewInput);
 	void OnDisconnect();
 
-	void KillCharacter(int Weapon = WEAPON_GAME);
+	void KillCharacter(int Weapon = WEAPON_GAME, bool SendKillMsg = true);
 	CCharacter *GetCharacter();
+	const CCharacter *GetCharacter() const;
 
 	void SpectatePlayerName(const char *pName);
 
@@ -76,8 +82,10 @@ public:
 	int m_LastAckedSnapshot;
 	int m_LAS_leftover;
 
+	int m_SentSnaps = 0;
+
 	// used for spectator mode
-	int m_SpectatorID;
+	int m_SpectatorId;
 
 	bool m_IsReady;
 
@@ -92,8 +100,9 @@ public:
 	int m_LastSetSpectatorMode;
 	int m_LastChangeInfo;
 	int m_LastEmote;
+	int m_LastEmoteGlobal;
 	int m_LastKill;
-	int m_LastCommands[4];
+	int m_aLastCommands[4];
 	int m_LastCommandPos;
 	int m_LastWhisperTo;
 	int m_LastInvited;
@@ -134,10 +143,8 @@ public:
 	std::atomic<int> m_WallshotKills;
 	
 	int m_JoinTick;
-	bool m_ForceBalanced;
 	int m_LastActionTick;
 	int m_TeamChangeTick;
-	bool m_SentSemicolonTip;
 
 	// network latency calculations
 	struct
@@ -151,6 +158,7 @@ public:
 	} m_Latency;
 
 private:
+	const uint32_t m_UniqueClientId;
 	CCharacter *m_pCharacter;
 	int m_NumInputs;
 	CGameContext *m_pGameServer;
@@ -161,12 +169,13 @@ private:
 	//
 	bool m_Spawning;
 	bool m_WeakHookSpawn;
-	int m_ClientID;
+	int m_ClientId;
 	int m_Team;
 
 	int m_Paused;
 	int64_t m_ForcePauseTime;
 	int64_t m_LastPause;
+	bool m_Afk;
 
 	int m_DefEmote;
 	int m_OverrideEmote;
@@ -192,32 +201,50 @@ public:
 	};
 
 	bool m_DND;
+	bool m_Whispers;
 	int64_t m_FirstVoteTick;
 	char m_aTimeoutCode[64];
 
 	void ProcessPause();
 	int Pause(int State, bool Force);
 	int ForcePause(int Time);
-	int IsPaused();
+	int IsPaused() const;
+	bool CanSpec() const;
 
-	bool IsPlaying();
+	bool IsPlaying() const;
 	int64_t m_Last_KickVote;
-	int64_t m_Last_Team;
+	int64_t m_LastDDRaceTeamChange;
 	int m_ShowOthers;
 	bool m_ShowAll;
 	vec2 m_ShowDistance;
 	bool m_SpecTeam;
 	bool m_NinjaJetpack;
-	bool m_Afk;
-	bool m_HasFinishScore;
+
+	// camera info is used sparingly for converting aim target to absolute world coordinates
+	class CCameraInfo
+	{
+		friend class CPlayer;
+		bool m_HasCameraInfo;
+		float m_Zoom;
+		int m_Deadzone;
+		int m_FollowFactor;
+
+	public:
+		vec2 ConvertTargetToWorld(vec2 Position, vec2 Target) const;
+		void Write(const CNetMsg_Cl_CameraInfo *pMsg);
+		void Reset();
+	} m_CameraInfo;
 
 	int m_ChatScore;
 
 	bool m_Moderating;
 
-	bool AfkTimer(CNetObj_PlayerInput *pNewTarget); // returns true if kicked
 	void UpdatePlaytime();
-	void AfkVoteTimer(CNetObj_PlayerInput *pNewTarget);
+	void AfkTimer();
+	void SetAfk(bool Afk);
+	void SetInitialAfk(bool Afk);
+	bool IsAfk() const { return m_Afk; }
+
 	int64_t m_LastPlaytime;
 	int64_t m_LastEyeEmote;
 	int64_t m_LastBroadcast;
@@ -225,12 +252,6 @@ public:
 
 	CNetObj_PlayerInput *m_pLastTarget;
 	bool m_LastTargetInit;
-	/* 
-		afk timer's 1st warning after 50% of sv_max_afk_time
-		2nd warning after 90%
-		kick after reaching 100% of sv_max_afk_time
-	*/
-	bool m_SentAfkWarning[2];
 
 	bool m_EyeEmoteEnabled;
 	int m_TimerType;
@@ -240,11 +261,20 @@ public:
 	bool CanOverrideDefaultEmote() const;
 
 	bool m_FirstPacket;
-	int64_t m_LastSQLQuery;
+	int64_t m_LastSqlQuery;
+	void ProcessScoreResult(CScorePlayerResult &Result);
+	std::shared_ptr<CScorePlayerResult> m_ScoreQueryResult;
+	std::shared_ptr<CScorePlayerResult> m_ScoreFinishResult;
 	bool m_NotEligibleForFinish;
 	int64_t m_EligibleForFinishCheck;
 	bool m_VotedForPractice;
-	int m_SwapTargetsClientID; //Client ID of the swap target for the given player
+	int m_SwapTargetsClientId; //Client ID of the swap target for the given player
+	bool m_BirthdayAnnounced;
+
+	int m_RescueMode;
+
+	CSaveTee m_LastTeleTee;
+	std::optional<CSaveTee> m_LastDeath;
 };
 
 #endif

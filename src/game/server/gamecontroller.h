@@ -7,6 +7,10 @@
 #include <engine/map.h>
 #include <game/server/entities/flag.h>
 #include <game/server/sql_handler.h>
+#include <engine/shared/protocol.h>
+#include <game/server/teams.h>
+
+struct CScoreLoadBestTimeResult;
 
 /*
 	Class: Game Controller
@@ -16,12 +20,13 @@
 class IGameController
 {
 
-	vec2 m_aaSpawnPoints[3][64];
-	int m_aNumSpawnPoints[3];
+	std::vector<vec2> m_avSpawnPoints[3];
 
 	class CGameContext *m_pGameServer;
 	class CConfig *m_pConfig;
 	class IServer *m_pServer;
+
+	CGameTeams m_Teams;
 
 protected:
 	CGameContext *GameServer() const { return m_pGameServer; }
@@ -60,8 +65,6 @@ protected:
 	int m_RoundCount;
 
 	int m_GameFlags;
-	int m_UnbalancedTick;
-	bool m_ForceBalanced;
 
 public:
 	const char *m_pGameType;
@@ -96,6 +99,7 @@ public:
 	virtual void OnCharacterSpawn(class CCharacter *pChr);
 
 	virtual void HandleCharacterTiles(class CCharacter *pChr, int MapIndex);
+	virtual void SetArmorProgress(CCharacter *pCharacter, int Progress){};
 
 	/*
 		Function: OnEntity
@@ -109,16 +113,16 @@ public:
 		Returns:
 			bool?
 	*/
-	virtual bool OnEntity(int Index, vec2 Pos, int Layer, int Flags, int Number = 0);
+	virtual bool OnEntity(int Index, int x, int y, int Layer, int Flags, bool Initial, int Number = 0);
 
 	virtual void OnPlayerConnect(class CPlayer *pPlayer);
 	virtual void OnPlayerDisconnect(class CPlayer *pPlayer, const char *pReason);
 	virtual void OnPlayerNameChange(class CPlayer *pPlayer);
 
-	void OnReset();
+	virtual void OnReset();
 
 	// game
-	void DoWarmup(int Seconds);
+	virtual void DoWarmup(int Seconds);
 
 	void StartRound();
 	void EndRound();
@@ -133,8 +137,6 @@ public:
 	/*
 
 	*/
-	virtual bool CanBeMovedOnBalance(int ClientID);
-
 	virtual void Tick();
 
 	virtual void Snap(int SnappingClient);
@@ -143,20 +145,26 @@ public:
 	virtual bool CanSpawn(int Team, vec2 *pOutPos, int DDTeam);
 
 	virtual void DoTeamChange(class CPlayer *pPlayer, int Team, bool DoChatMsg = true);
+
+	int TileFlagsToPickupFlags(int TileFlags) const;
+
 	/*
 
 	*/
 	virtual const char *GetTeamName(int Team);
-	virtual int GetAutoTeam(int NotThisID);
-	virtual bool CanJoinTeam(int Team, int NotThisID);
+	virtual int GetAutoTeam(int NotThisId);
+	virtual bool CanJoinTeam(int Team, int NotThisId, char *pErrorReason, int ErrorReasonSize);
 	int ClampTeam(int Team);
 
-	virtual int64_t GetMaskForPlayerWorldEvent(int Asker, int ExceptID = -1);
+	CClientMask GetMaskForPlayerWorldEvent(int Asker, int ExceptID = -1);
 
+	bool IsTeamPlay() const { return m_GameFlags & GAMEFLAG_TEAMS; }
 	// DDRace
 
 	float m_CurrentRecord;
 	int m_FakeWarmup;
+	CGameTeams &Teams() { return m_Teams; }
+	std::shared_ptr<CScoreLoadBestTimeResult> m_pLoadBestTimeResult;
 };
 
 #endif

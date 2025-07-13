@@ -1,24 +1,32 @@
 #include "serverbrowser_ping_cache.h"
 
+#include <base/system.h>
 #include <engine/console.h>
 #include <engine/sqlite.h>
 
 #include <sqlite3.h>
 
-#include <algorithm>
-#include <cstdio>
+#include <unordered_map>
 #include <vector>
 
 class CServerBrowserPingCache : public IServerBrowserPingCache
 {
 public:
+	class CEntry
+	{
+	public:
+		NETADDR m_Addr;
+		int m_Ping;
+	};
+
 	CServerBrowserPingCache(IConsole *pConsole, IStorage *pStorage);
-	virtual ~CServerBrowserPingCache() = default;
+	~CServerBrowserPingCache() override = default;
 
-	void Load();
+	void Load() override;
 
-	void CachePing(NETADDR Addr, int Ping);
-	void GetPingCache(const CEntry **ppEntries, int *pNumEntries);
+	int NumEntries() const override;
+	void CachePing(const NETADDR &Addr, int Ping) override;
+	int GetPing(const NETADDR *pAddrs, int NumAddrs) const override;
 
 private:
 	IConsole *m_pConsole;
@@ -27,8 +35,7 @@ private:
 	CSqliteStmt m_pLoadStmt;
 	CSqliteStmt m_pStoreStmt;
 
-	std::vector<CEntry> m_aEntries;
-	std::vector<CEntry> m_aNewEntries;
+	std::unordered_map<NETADDR, int> m_Entries;
 };
 
 CServerBrowserPingCache::CServerBrowserPingCache(IConsole *pConsole, IStorage *pStorage) :
@@ -56,7 +63,7 @@ void CServerBrowserPingCache::Load()
 {
 	if(m_pDisk)
 	{
-		int PrevNewEntriesSize = m_aNewEntries.size();
+		std::vector<CEntry> vNewEntries;
 
 		sqlite3 *pSqlite = m_pDisk.get();
 		IConsole *pConsole = m_pConsole;
@@ -86,7 +93,7 @@ void CServerBrowserPingCache::Load()
 					}
 					continue;
 				}
-				m_aNewEntries.push_back(CEntry{Addr, Ping});
+				vNewEntries.push_back(CEntry{Addr, Ping});
 			}
 			else
 			{
@@ -96,21 +103,32 @@ void CServerBrowserPingCache::Load()
 		if(Error)
 		{
 			pConsole->Print(IConsole::OUTPUT_LEVEL_STANDARD, "serverbrowse_ping_cache", "failed to load ping cache");
-			m_aNewEntries.resize(PrevNewEntriesSize);
+			return;
+		}
+		for(const auto &Entry : vNewEntries)
+		{
+			m_Entries[Entry.m_Addr] = Entry.m_Ping;
 		}
 	}
 }
 
-void CServerBrowserPingCache::CachePing(NETADDR Addr, int Ping)
+int CServerBrowserPingCache::NumEntries() const
 {
-	Addr.port = 0;
-	m_aNewEntries.push_back(CEntry{Addr, Ping});
+	return m_Entries.size();
+}
+
+void CServerBrowserPingCache::CachePing(const NETADDR &Addr, int Ping)
+{
+	NETADDR StoredAddr = Addr;
+	StoredAddr.type &= ~NETTYPE_TW7;
+	StoredAddr.port = 0;
+	m_Entries[StoredAddr] = Ping;
 	if(m_pDisk)
 	{
 		sqlite3 *pSqlite = m_pDisk.get();
 		IConsole *pConsole = m_pConsole;
 		char aAddr[NETADDR_MAXSTRSIZE];
-		net_addr_str(&Addr, aAddr, sizeof(aAddr), false);
+		net_addr_str(&StoredAddr, aAddr, sizeof(aAddr), false);
 
 		bool Error = false;
 		Error = Error || !m_pStoreStmt;
@@ -125,80 +143,25 @@ void CServerBrowserPingCache::CachePing(NETADDR Addr, int Ping)
 	}
 }
 
-void CServerBrowserPingCache::GetPingCache(const CEntry **ppEntries, int *pNumEntries)
+int CServerBrowserPingCache::GetPing(const NETADDR *pAddrs, int NumAddrs) const
 {
-	if(!m_aNewEntries.empty())
+	int Ping = -1;
+	for(int i = 0; i < NumAddrs; i++)
 	{
-		class CAddrComparer
+		NETADDR LookupAddr = pAddrs[i];
+		LookupAddr.type &= ~NETTYPE_TW7;
+		LookupAddr.port = 0;
+		auto Entry = m_Entries.find(LookupAddr);
+		if(Entry == m_Entries.end())
 		{
-		public:
-			bool operator()(const CEntry &a, const CEntry &b)
-			{
-				return net_addr_comp(&a.m_Addr, &b.m_Addr) < 0;
-			}
-		};
-		std::vector<CEntry> aOldEntries;
-		std::swap(m_aEntries, aOldEntries);
-
-		// Remove duplicates, keeping newer ones.
-		std::stable_sort(m_aNewEntries.begin(), m_aNewEntries.end(), CAddrComparer());
-		{
-			unsigned To = 0;
-			for(unsigned int From = 0; From < m_aNewEntries.size(); From++)
-			{
-				if(To < From)
-				{
-					m_aNewEntries[To] = m_aNewEntries[From];
-				}
-				if(From + 1 >= m_aNewEntries.size() ||
-					net_addr_comp(&m_aNewEntries[From].m_Addr, &m_aNewEntries[From + 1].m_Addr) != 0)
-				{
-					To++;
-				}
-			}
-			m_aNewEntries.resize(To);
+			continue;
 		}
-		// Only keep the new entries where there are duplicates.
-		m_aEntries.reserve(m_aNewEntries.size() + aOldEntries.size());
+		if(Ping == -1 || Entry->second < Ping)
 		{
-			unsigned i = 0;
-			unsigned j = 0;
-			while(i < aOldEntries.size() && j < m_aNewEntries.size())
-			{
-				int Cmp = net_addr_comp(&aOldEntries[i].m_Addr, &m_aNewEntries[j].m_Addr);
-				if(Cmp != 0)
-				{
-					if(Cmp < 0)
-					{
-						m_aEntries.push_back(aOldEntries[i]);
-						i++;
-					}
-					else
-					{
-						m_aEntries.push_back(m_aNewEntries[j]);
-						j++;
-					}
-				}
-				else
-				{
-					// Ignore the old element if we have both.
-					i++;
-				}
-			}
-			// Add the remaining elements.
-			for(; i < aOldEntries.size(); i++)
-			{
-				m_aEntries.push_back(aOldEntries[i]);
-			}
-			for(; j < m_aNewEntries.size(); j++)
-			{
-				m_aEntries.push_back(m_aNewEntries[j]);
-			}
+			Ping = Entry->second;
 		}
-		m_aNewEntries.clear();
 	}
-	*ppEntries = m_aEntries.data();
-	*pNumEntries = m_aEntries.size();
+	return Ping;
 }
 
 IServerBrowserPingCache *CreateServerBrowserPingCache(IConsole *pConsole, IStorage *pStorage)

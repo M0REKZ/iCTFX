@@ -1,14 +1,5 @@
-#include <stdint.h>
+/* AUTO GENERATED! DO NOT EDIT MANUALLY! See scripts/generate_unicode_tolower.py */
+#include <cstdint>
+#include <unordered_map>
 
-struct UPPER_LOWER
-{
-	int32_t upper;
-	int32_t lower;
-};
-
-enum
-{
-	NUM_TOLOWER = 1390,
-};
-
-extern const struct UPPER_LOWER tolowermap[];
+extern const std::unordered_map<int32_t, int32_t> UPPER_TO_LOWER_CODEPOINT_MAP;

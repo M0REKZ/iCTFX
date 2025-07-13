@@ -1,12 +1,3 @@
-##### authors #####
-#originally created by:
-#	Evropi
-#modified by:
-#
-##### /authors #####
-
-##### translated strings #####
-
 %ds left
 == %ds ακόμα
 
@@ -25,9 +16,6 @@
 %s wins!
 == Ο/Η %s νίκησε!
 
--Page %d-
-== -Σελίδα %d-
-
 Abort
 == Ματαίωση
 
@@ -43,14 +31,8 @@ Address
 All
 == Όλοι
 
-Are you sure that you want to delete the demo?
-== Θέλετε σίγουρα να διαγράψετε αυτήν την επίδειξη;
-
 Are you sure that you want to quit?
 == Θέλετε σίγουρα να παραιτηθείτε;
-
-Are you sure that you want to remove the player from your friends list?
-== Θέλετε σίγουρα να αφερέσετε αυτόν τον παίκτη από την λίστα των φίλων σας;
 
 Automatically record demos
 == Αυτόματη καταγραφή επιδείξεων
@@ -82,17 +64,11 @@ Clan
 Client
 == Πελάτης
 
-Close
-== Κλείσιμο
-
-Connect
-== Σύνδεση
-
 Connecting to
 == Σύνδεση με
 
-Connection Problems...
-== Προβλήματα Σύνδεσης...
+Connection Problems…
+== Προβλήματα Σύνδεσης…
 
 Console
 == Κονσόλα
@@ -114,9 +90,6 @@ Delete
 
 Delete demo
 == Διαγραφή επίδειξης
-
-Demo details
-== Λεπτομέρειες επίδειξης
 
 Demofile: %s
 == Αρχείο επίδειξης: %s
@@ -157,9 +130,6 @@ Favorites
 Feet
 == Πόδια
 
-Filter
-== Φίλτρο
-
 Fire
 == Πυρ
 
@@ -171,9 +141,6 @@ Force vote
 
 Free-View
 == Ελεύθερη Όψη
-
-Friends
-== Φίλοι
 
 Fullscreen
 == Πλήρης οθόνη
@@ -241,9 +208,6 @@ MOTD
 Map
 == Χάρτης
 
-Mouse sens.
-== Ταχύτητα δείκτη
-
 Move left
 == Κίνηση αριστερά
 
@@ -283,9 +247,6 @@ No servers match your filter criteria
 Ok
 == Εντάξει
 
-Open
-== Άνοιγμα
-
 Parent Folder
 == Επάνω
 
@@ -301,10 +262,6 @@ Ping
 Pistol
 == Πιστόλι
 
-[Demo browser]
-Play
-== Παίξτε
-
 Play background music
 == Αναπαραγωγή μουσικής υπόκρουσης
 
@@ -313,9 +270,6 @@ Player
 
 Player country:
 == Χώρα παίκτη:
-
-Player options
-== Επιλογές παίκτη
 
 Players
 == Παίκτες
@@ -338,9 +292,6 @@ Red team
 Red team wins!
 == Η κόκκινη ομάδα νίκησε!
 
-Refresh
-== Ανανέωση
-
 Remote console
 == Απομακρ. κονσόλα
 
@@ -350,17 +301,11 @@ Remove
 Remove friend
 == Αφαίρεση φίλου
 
-Rename
-== Μετονομασία
-
 Rename demo
 == Μετονομασία επίδειξης
 
 Reset filter
 == Αφαίρεση φίλτρου
-
-Sample rate
-== Δειγματοληψία
 
 Score
 == Βαθμ.
@@ -376,12 +321,6 @@ Screenshot
 
 Server address:
 == Διεύθ/ση διακομιστή:
-
-Server details
-== Λεπτομέριες διακομιστή
-
-Server filter
-== Φίλτρο διακομιστών
 
 Server info
 == Πληροφορίες
@@ -406,9 +345,6 @@ Show name plates
 
 Show only chat messages from friends
 == Προβολή μηνυμάτων μόνο από φίλους
-
-Skins
-== Στολές
 
 Sound
 == Ήχος
@@ -455,12 +391,6 @@ The audio device couldn't be initialised.
 The server is running a non-standard tuning on a pure game type.
 == Ο διακομιστής εκτελεί μη-κανονικές ρυθμίσεις σε κανονικό τύπο παιχνιδιού.
 
-There's an unsaved map in the editor, you might want to save it before you quit the game.
-== Υπαρχεί μη αποθηκευμένος χάρτης στον επεξεργαστή. Να γίνει αποθήκευση πριν την έξοδο;
-
-Time limit
-== Όριο χρόνου
-
 Time limit: %d min
 == Όριο χρόνου: %d λ
 
@@ -469,9 +399,6 @@ Try again
 
 Type
 == Τύπος
-
-Unable to delete the demo
-== Απέτυχε η διαγραφή της επίδειξης
 
 Unable to rename the demo
 == Απέτυχε η μετονομασία της επίδειξης
@@ -544,26 +471,11 @@ FSAA samples
 Sound volume
 == Ένταση ήχου
 
-Created:
-== Δημιουργήθηκε:
-
 Max Screenshots
 == Μέγιστος αριθμός στιγμιότυπων
 
-Length:
-== Διάρκεια:
-
 Laser
 == Λέιζερ
-
-Netversion:
-== Έκδοση:
-
-Map:
-== Χάρτης:
-
-Info
-== Πληροφορίες
 
 Hue
 == Απόχρωση
@@ -574,32 +486,14 @@ Record demo
 Your skin
 == Η στολή σας
 
-Size:
-== Μέγεθος:
-
 Reset to defaults
 == Επαναφορά προεπιλογών
-
-Quit anyway?
-== Έξοδος οπωσδήποτε;
-
-Display Modes
-== Ανάλυσεις Οθόνης
-
-Version:
-== Έκδοση:
-
-Round
-== Γύρος
 
 Lht.
 == Φωτεινότ.
 
 UI Color
 == Χρώμα Μενού
-
-Crc:
-== Crc:
 
 Alpha
 == Άλφα
@@ -610,28 +504,217 @@ LAN
 Name plates size
 == Μήκος ψευδωνύμου
 
-Type:
-== Τύπος:
+[Translation credits: Add your own name here when you update translations]
+English translation by the DDNet Team
+== Greek translation by Evropi
+
+[Graphics error]
+Failed during initialization. Try to change gfx_backend to OpenGL or Vulkan in settings_ddnet.cfg in the config directory and try again.
+== 
+
+[Graphics error]
+Out of VRAM. Try setting 'cl_skins_loaded_max' to a lower value or remove custom assets (skins, entities, etc.), especially those with high resolution.
+== 
+
+[Graphics error]
+An error during command recording occurred. Try to update your GPU drivers.
+== 
+
+[Graphics error]
+A render command failed. Try to update your GPU drivers.
+== 
+
+[Graphics error]
+Submitting the render commands failed. Try to update your GPU drivers.
+== 
+
+[Graphics error]
+Failed to swap framebuffers. Try to update your GPU drivers.
+== 
+
+[Graphics error]
+Unknown error. Try to change gfx_backend to OpenGL or Vulkan in settings_ddnet.cfg in the config directory and try again.
+== 
+
+[Graphics error]
+Could not initialize the given graphics backend, reverting to the default backend now.
+== 
+
+[Graphics error]
+Could not initialize the given graphics backend, this is probably because you didn't install the driver of the integrated graphics card.
+== 
+
+Could not resolve connect address '%s'. See local console for details.
+== 
+
+Connect address error
+== 
+
+Could not save downloaded map. Try manually deleting this file: %s
+== 
+
+Could not connect dummy
+== 
+
+Error playing demo
+== 
 
 Successfully saved the replay!
 == 
 
-Saving ddnet-settings.cfg failed
+Failed saving the replay!
+== 
+
+Saving settings to '%s' failed
+== 
+
+Error saving settings
 == 
 
 Replay feature is disabled!
 == 
 
+No demo with this filename exists
+== 
+
 The width of texture %s is not divisible by %d, or the height is not divisible by %d, which might cause visual bugs.
+== 
+
+"%s" is not compatible with pnglite and cannot be loaded by old DDNet versions:
 == 
 
 The format of texture %s is not RGBA which will cause visual bugs.
 == 
 
+Preparing demo playback
+== 
+
+Connected
+== 
+
+Loading map file from storage
+== 
+
+Loading demo file from storage
+== 
+
+Some fonts could not be loaded. Check the local console for details.
+== 
+
+Loading DDNet Client
+== 
+
+Initializing components
+== 
+
+Why are you slowmo replaying to read this?
+== 
+
+Initializing assets
+== 
+
+Initializing map logic
+== 
+
+Sending initial client info
+== 
+
 Warning
 == 
 
+Quitting. Please wait…
+== 
+
+Restarting. Please wait…
+== 
+
+Loading skin files
+== 
+
+Search
+== 
+
+Auto-sync player camera
+== 
+
+[Auto camera]
+Disabled
+== 
+
+[Auto camera]
+Enabled
+== 
+
+[Auto camera]
+Unavailable for this player
+== 
+
+[Auto camera]
+Inactive
+== 
+
+[Auto camera]
+Active
+== 
+
+Searching
+== 
+
+Enter Username
+== 
+
+Enter Password
+== 
+
+NOT CONNECTED
+== 
+
+Match %d of %d
+== 
+
+No results
+== 
+
+Lines %d - %d (%s)
+== 
+
+Locked
+== 
+
+Following
+== 
+
+Loading commands…
+== 
+
+Loading maps…
+== 
+
 Debug mode enabled. Press Ctrl+Shift+D to disable debug mode.
+== 
+
+Position:
+== 
+
+Speed:
+== 
+
+Angle:
+== 
+
+Multi-View
+== 
+
+[Spectating]
+Following %d: %s
+== 
+
+[Spectating]
+Following %s
+== 
+
+[Spectating Camera Mode Icon]
+AUTO
 == 
 
 Server best:
@@ -640,7 +723,37 @@ Server best:
 Personal best:
 == 
 
+Team %d
+== 
+
+Some map images could not be loaded. Check the local console for details.
+== 
+
+Loading map
+== 
+
+Uploading map data to GPU
+== 
+
+Some map sounds could not be loaded. Check the local console for details.
+== 
+
+Loading menu themes
+== 
+
 Reset
+== 
+
+Press a key…
+== 
+
+Settings
+== 
+
+Editor
+== 
+
+Main menu
 == 
 
 Browser
@@ -649,28 +762,22 @@ Browser
 Ghost
 == 
 
-Loading DDNet Client
+Reconnect in %d sec
 == 
 
-Reconnect in %d sec
+Rename folder
 == 
 
 Render demo
 == 
 
-Replace video
+Render complete
 == 
 
-File already exists, do you want to overwrite it?
+Restart
 == 
 
-Are you sure that you want to disconnect?
-== 
-
-Disconnect Dummy
-== 
-
-Are you sure that you want to disconnect your dummy?
+Are you sure that you want to restart?
 == 
 
 Welcome to DDNet
@@ -697,19 +804,49 @@ Your nickname '%s' is already used (%d points). Do you still want to use it?
 Checking for existing player with your name
 == 
 
-Are you sure that you want to disconnect and switch to a different server?
+Save skin
 == 
 
-Country / Region
+Are you sure you want to save your skin? If a skin with this name already exists, it will be replaced.
 == 
 
-Destination file already exist
+There's an unsaved map in the editor, you might want to save it.
+== 
+
+Continue anyway?
+== 
+
+This name cannot be used for files and folders
+== 
+
+A demo with this name already exists
+== 
+
+A folder with this name already exists
+== 
+
+Unable to rename the folder
+== 
+
+File '%s' already exists, do you want to overwrite it?
+== 
+
+Replace video
+== 
+
+(paused)
 == 
 
 Speed
 == 
 
 Video name:
+== 
+
+Videos directory
+== 
+
+Video was saved to '%s'
 == 
 
 Join Tutorial Server
@@ -721,10 +858,49 @@ Skip Tutorial
 Show DDNet map finishes in server browser
 == 
 
-transmits your player name to info2.ddnet.tw
+transmits your player name to info.ddnet.org
+== 
+
+Cancel
+== 
+
+Error checking player name
+== 
+
+Could not check for existing player with your name. Check your internet connection.
+== 
+
+Unable to save the skin with a reserved name
+== 
+
+Unable to save the skin
+== 
+
+Trying to determine UDP connectivity…
+== 
+
+UDP seems to be filtered.
+== 
+
+UDP and TCP IP addresses seem to be different. Try disabling VPN, proxy or network accelerators.
+== 
+
+No answer from server yet.
+== 
+
+%d/%d KiB (%.1f KiB/s)
+== 
+
+Getting game info
+== 
+
+Requesting to join the game
 == 
 
 Theme
+== 
+
+Loading menu images
 == 
 
 AFR
@@ -751,7 +927,10 @@ CHN
 Getting server list from master server
 == 
 
-Search
+No local servers found (ports %d-%d)
+== 
+
+Example of usage
 == 
 
 Exclude
@@ -769,7 +948,10 @@ Exclude
 %d player
 == 
 
-Refreshing...
+Are you sure that you want to disconnect and switch to a different server?
+== 
+
+No login required
 == 
 
 Filter connecting players
@@ -787,31 +969,148 @@ Countries
 Types
 == 
 
+Communities
+== 
+
+Copy info
+== 
+
 Leak IP
 == 
 
-Select a name
+No server selected
 == 
 
-Please use a different name
+Online friends (%d)
+== 
+
+Online clanmates (%d)
+== 
+
+[friends (server browser)]
+Offline (%d)
+== 
+
+Click to select server. Double click to join your friend.
+== 
+
+Click to remove this player from your friends list.
+== 
+
+Click to remove this clan from your friends list.
+== 
+
+Add friends by entering their name below or by clicking their name in the player list.
+== 
+
+Add clanmates by entering their clan below and leaving the name blank.
+== 
+
+Are you sure that you want to remove the player '%s' from your friends list?
+== 
+
+Are you sure that you want to remove the clan '%s' from your friends list?
+== 
+
+Add Clan
+== 
+
+Server filter
+== 
+
+Friends
+== 
+
+Play the current demo
+== 
+
+Pause the current demo
+== 
+
+Stop the current demo
+== 
+
+Go back the specified duration
+== 
+
+[Demo player duration]
+%s min.
+== 
+
+[Demo player duration]
+%s sec.
+== 
+
+Change the skip duration
+== 
+
+Go forward the specified duration
+== 
+
+Go back one tick
+== 
+
+Go forward one tick
+== 
+
+Go back one marker
+== 
+
+Go forward one marker
+== 
+
+Slow down the demo
+== 
+
+Speed up the demo
+== 
+
+Mark the beginning of a cut (right click to reset)
+== 
+
+Mark the end of a cut (right click to reset)
+== 
+
+Export cut as a separate demo
+== 
+
+Close the demo player
+== 
+
+Toggle keyboard shortcuts
+== 
+
+Toggle auto camera
+== 
+
+Export demo cut
+== 
+
+Cut interval
+== 
+
+Cut length
 == 
 
 Remove chat
 == 
 
-Markers:
+Render cut to video
 == 
 
-%.2f MiB
+Please use a different filename
 == 
 
-%.2f KiB
+File already exists, do you want to overwrite it?
+== 
+
+Loading demo files
+== 
+
+All combined
 == 
 
 Demo
-== 
-
-Markers
 == 
 
 Length
@@ -820,19 +1119,80 @@ Length
 Date
 == 
 
+No demo selected
+== 
+
+Folder Link
+== 
+
+Created
+== 
+
+Size
+== 
+
+%.2f MiB
+== 
+
+%.2f KiB
+== 
+
+Markers
+== 
+
+Netversion
+== 
+
+Map size
+== 
+
+[Demo details]
+map not included
+== 
+
 Fetch Info
 == 
 
 Demos directory
 == 
 
-Render
+Open the directory that contains the demo files
+== 
+
+Are you sure that you want to delete the folder '%s'?
+== 
+
+Are you sure that you want to delete the demo '%s'?
+== 
+
+Delete folder
+== 
+
+Unable to delete the demo '%s'
+== 
+
+Unable to delete the folder '%s'. Make sure it's empty first.
+== 
+
+Are you sure that you want to disconnect?
 == 
 
 Connect Dummy
 == 
 
+Dummy is not allowed on this server
+== 
+
+Please wait…
+== 
+
 Connecting dummy
+== 
+
+Disconnect Dummy
+== 
+
+Are you sure that you want to disconnect your dummy?
 == 
 
 Kill
@@ -841,10 +1201,132 @@ Kill
 Pause
 == 
 
+Edit touch controls
+== 
+
+Close
+== 
+
+https://wiki.ddnet.org/wiki/Touch_controls
+== 
+
+Save changes
+== 
+
+Error saving touch controls
+== 
+
+Could not save touch controls to file. See local console for details.
+== 
+
+Unsaved changes
+== 
+
+Discard changes
+== 
+
+Are you sure that you want to discard the current changes to the touch controls?
+== 
+
+Are you sure that you want to reset the touch controls to default?
+== 
+
+Import from clipboard
+== 
+
+Are you sure that you want to import the touch controls from the clipboard? This will overwrite your current touch controls.
+== 
+
+Export to clipboard
+== 
+
+Direct touch input while ingame
+== 
+
+[Direct touch input]
+Disabled
+== 
+
+[Direct touch input]
+Active action
+== 
+
+[Direct touch input]
+Aim
+== 
+
+[Direct touch input]
+Fire
+== 
+
+[Direct touch input]
+Hook
+== 
+
+Direct touch input while spectating
+== 
+
+Error loading touch controls
+== 
+
+Could not load touch controls from file. See local console for details.
+== 
+
+Could not load default touch controls from file. See local console for details.
+== 
+
+Could not load touch controls from clipboard. See local console for details.
+== 
+
+Community
+== 
+
+Round %d/%d
+== 
+
+[Team status]
+forbidden
+== 
+
+[Team status]
+solo
+== 
+
+[Team status]
+allowed
+== 
+
+[Team status]
+required
+== 
+
+Teams
+== 
+
+[Team size]
+minimum
+== 
+
+[Team size]
+maximum
+== 
+
+Loading…
+== 
+
+Loading ghost files
+== 
+
 Time
 == 
 
-Reload
+Ghosts directory
+== 
+
+Activate all
+== 
+
+Deactivate all
 == 
 
 Deactivate
@@ -856,37 +1338,50 @@ Activate
 Save
 == 
 
+Menu opened. Press Esc key again to close menu.
+== 
+
 Smooth Dynamic Camera
 == 
 
 Switch weapon when out of ammo
 == 
 
-Reset wanted weapon on death
-== 
-
-Show clan above name plates
-== 
-
-Clan plates size
-== 
-
 Skip the main menu
+== 
+
+[Hertz]
+Hz
 == 
 
 Refresh Rate
 == 
 
-Show console window
+Save power by lowering refresh rate (higher input latency)
 == 
 
 Settings file
 == 
 
+Open the settings file
+== 
+
+Saves file
+== 
+
+Open the saves file
+== 
+
 Config directory
 == 
 
+Open the directory that contains the configuration and user files
+== 
+
 Themes directory
+== 
+
+Open the directory to add custom themes
 == 
 
 Automatically take statboard screenshot
@@ -898,10 +1393,16 @@ Automatically create statboard csv
 Max CSVs
 == 
 
-Dummy settings
+Dummy
+== 
+
+Player info change cooldown
 == 
 
 Download skins
+== 
+
+Download community skins
 == 
 
 Vanilla skins only
@@ -913,10 +1414,31 @@ Fat skins (DDFat)
 Skin prefix
 == 
 
+This skin name cannot be used.
+== 
+
+Skin could not be loaded due to an error. Check the local console for details.
+== 
+
+Skin could not be found.
+== 
+
+Create a random skin
+== 
+
+Choose default eyes when joining a server
+== 
+
+No skins match your filter criteria
+== 
+
 Skin Database
 == 
 
 Skins directory
+== 
+
+Open the directory to add custom skins
 == 
 
 Hook collisions
@@ -940,19 +1462,22 @@ Show all
 Toggle dyncam
 == 
 
-Toggle dummy
+Toggle ghost
 == 
 
-Toggle ghost
+Converse
+== 
+
+Chat command
+== 
+
+Toggle dummy
 == 
 
 Dummy copy
 == 
 
 Hammerfly dummy
-== 
-
-Converse
 == 
 
 Statboard
@@ -967,13 +1492,57 @@ Show entities
 Show HUD
 == 
 
-Chat command
+Enable controller
 == 
 
-UI mouse s.
+Controller
 == 
 
-Dummy
+Ingame controller mode
+== 
+
+[Ingame controller mode]
+Relative
+== 
+
+[Ingame controller mode]
+Absolute
+== 
+
+Ingame controller sens.
+== 
+
+UI controller sens.
+== 
+
+Controller jitter tolerance
+== 
+
+No controller found. Plug in a controller.
+== 
+
+Axis
+== 
+
+Status
+== 
+
+Aim bind
+== 
+
+Mouse
+== 
+
+Ingame mouse sens.
+== 
+
+UI mouse sens.
+== 
+
+Reset controls
+== 
+
+Are you sure that you want to reset the controls to their defaults?
 == 
 
 Windowed
@@ -988,13 +1557,19 @@ Windowed fullscreen
 Desktop fullscreen
 == 
 
-may cause delay
-== 
-
 Screen
 == 
 
-Use high DPI
+may cause delay
+== 
+
+Allows maps to render with more detail
+== 
+
+Show FPS
+== 
+
+Renders your frame rate in the top right
 == 
 
 Renderer
@@ -1006,7 +1581,7 @@ default
 custom
 == 
 
-Graphics cards
+Graphics card
 == 
 
 auto
@@ -1033,9 +1608,6 @@ Enable team chat sound
 Enable highlighted chat sound
 == 
 
-Threaded sound loading
-== 
-
 Game sound volume
 == 
 
@@ -1048,7 +1620,10 @@ Map sound volume
 Background music volume
 == 
 
-HUD
+Tee
+== 
+
+Appearance
 == 
 
 DDNet
@@ -1060,58 +1635,88 @@ Assets
 DDNet Client needs to be restarted to complete update!
 == 
 
-Use DDRace Scoreboard
+HUD
 == 
 
-Show client IDs
+Name Plate
+== 
+
+Hook Collisions
+== 
+
+Info Messages
+== 
+
+Show health, shields and ammo
 == 
 
 Show score
 == 
 
-Show health + ammo
+Show local time always
 == 
 
-Show names in chat in team colors
+Show spectator cursor
 == 
 
 Show votes window after voting
 == 
 
-Show kill messages
+Authed name color in scoreboard
 == 
 
-Kill Messages
+Same clan color in scoreboard
 == 
 
-Kill Message Normal Color
+DDRace HUD
 == 
 
-Kill Message Highlight Color
+Show client IDs (scoreboard, chat, spectator)
 == 
 
-Laser Outline Color
+Show DDRace HUD
 == 
 
-Laser Inner Color
+Show jumps indicator
 == 
 
-Hookline
+Show number of spectators
 == 
 
-Size
+Show dummy actions
 == 
 
-No hit
+Show player position
 == 
 
-Hookable
+Show player speed
 == 
 
-Tee
+Show player target angle
+== 
+
+Show freeze bars
+== 
+
+Opacity of freeze bars inside freeze
+== 
+
+Always show chat
+== 
+
+Show names in chat in team colors
+== 
+
+Show only chat messages from team members
 == 
 
 Use old chat style
+== 
+
+Chat font size
+== 
+
+Chat width
 == 
 
 Messages
@@ -1138,19 +1743,204 @@ Client message
 Preview
 == 
 
+[Show name plates]
+None
+== 
+
+[Show name plates]
+Own
+== 
+
+[Show name plates]
+Others
+== 
+
+[Show name plates]
+All
+== 
+
+Name plates offset
+== 
+
+Show clan above name plates
+== 
+
+Clan plates size
+== 
+
+Show friend icon in name plates
+== 
+
+Show client IDs in name plates
+== 
+
+Show client IDs on a seperate line
+== 
+
+Client IDs size
+== 
+
+Hook Strength
+== 
+
+Show hook strength icon indicator
+== 
+
+Show hook strength number indicator
+== 
+
+Size of hook strength icon and number indicator
+== 
+
+Key Presses
+== 
+
+Show players' key presses
+== 
+
+[Show players' key presses]
+None
+== 
+
+[Show players' key presses]
+Own
+== 
+
+[Show players' key presses]
+Others
+== 
+
+[Show players' key presses]
+All
+== 
+
+Size of key press icons
+== 
+
+Preview player's name plate
+== 
+
+Preview dummy's name plate
+== 
+
+Hook collision line
+== 
+
+Show own player's hook collision line
+== 
+
+Always show own player's hook collision line
+== 
+
+Show other players' hook collision lines
+== 
+
+Always show other players' hook collision lines
+== 
+
+Width of your own hook collision line
+== 
+
+Width of others' hook collision line
+== 
+
+Hook collision line opacity
+== 
+
+Colors of the hook collision line, in case of a possible collision with:
+== 
+
+Your movements are not taken into account when calculating the line colors
+== 
+
+Nothing hookable
+== 
+
+Something hookable
+== 
+
+A Tee
+== 
+
+Preview 'Hook collisions' being pressed
+== 
+
+Show kill messages
+== 
+
+Show finish messages
+== 
+
+Normal Color
+== 
+
+Highlight Color
+== 
+
+Weapons
+== 
+
+Rifle Laser Outline Color
+== 
+
+Rifle Laser Inner Color
+== 
+
+Shotgun Laser Outline Color
+== 
+
+Shotgun Laser Inner Color
+== 
+
+Entities
+== 
+
+Door Laser Outline Color
+== 
+
+Door Laser Inner Color
+== 
+
+Freeze Laser Outline Color
+== 
+
+Freeze Laser Inner Color
+== 
+
+Dragger Outline Color
+== 
+
+Dragger Inner Color
+== 
+
+Set all to Rifle
+== 
+
 Save the best demo of each race
 == 
 
 Enable replays
 == 
 
-Default length: %d
+Default length
+== 
+
+Enable ghost
+== 
+
+When you cross the start line, show a ghost tee replicating the movements of your best time
 == 
 
 Show ghost
 == 
 
+Opacity
+== 
+
 Save ghost
+== 
+
+Only save improvements
 == 
 
 Gameplay
@@ -1162,13 +1952,22 @@ Overlay entities
 Show text entities
 == 
 
+Adjust the opacity of entities belonging to other teams, such as tees and name plates
+== 
+
 Show others (own team only)
 == 
 
 Show quads
 == 
 
+Quads are used for background decoration
+== 
+
 AntiPing
+== 
+
+Tries to predict other entities to give a feel of low latency
 == 
 
 AntiPing: predict other players
@@ -1180,34 +1979,22 @@ AntiPing: predict weapons
 AntiPing: predict grenade paths
 == 
 
-Show other players' hook collision lines
-== 
-
-Show other players' key presses
-== 
-
-Show local player's key presses
-== 
-
-Old mouse mode
+AntiPing: prediction margin
 == 
 
 Background
 == 
 
-Entities Background color
+Regular background color
+== 
+
+Entities background color
 == 
 
 Use current map as background
 == 
 
 Show tiles layers from BG map
-== 
-
-Regular Background Color
-== 
-
-Try fast HTTP map download first
 == 
 
 New random timeout code
@@ -1219,13 +2006,16 @@ Run on join
 Chat command (e.g. showall 1)
 == 
 
+Unregister protocol and file extensions
+== 
+
 DDNet %s is available:
 == 
 
 Update now
 == 
 
-Updating...
+Updating…
 == 
 
 DDNet Client updated!
@@ -1237,7 +2027,19 @@ No updates available
 Check now
 == 
 
-Entities
+Basic
+== 
+
+Custom
+== 
+
+Are you sure that you want to delete '%s'?
+== 
+
+Delete skin
+== 
+
+Unable to delete skin
 == 
 
 Emoticons
@@ -1246,19 +2048,28 @@ Emoticons
 Particles
 == 
 
+Extras
+== 
+
+Loading assets
+== 
+
 Assets directory
+== 
+
+Open the directory to add custom assets
 == 
 
 Discord
 == 
 
-https://ddnet.tw/discord
+https://ddnet.org/discord
 == 
 
 Learn
 == 
 
-https://wiki.ddnet.tw/
+https://wiki.ddnet.org/
 == 
 
 Tutorial
@@ -1270,19 +2081,10 @@ Can't find a Tutorial server
 Website
 == 
 
-Settings
-== 
-
 Stop server
 == 
 
 Run server
-== 
-
-Server executable not found, can't run server
-== 
-
-Editor
 == 
 
 [Start menu]
@@ -1295,10 +2097,30 @@ DDNet %s is out!
 Downloading %s:
 == 
 
-Update failed! Check log...
+Update failed! Check log…
 == 
 
-Restart
+Server could not be started. Make sure to grant the notification permission in the app settings so the server can run in the background.
+== 
+
+Server executable not found, can't run server
+== 
+
+Loading race demo files
+== 
+
+[Spectators]
+%d others…
+== 
+
+Super
+== 
+
+[Team and size]
+%d\n(%d/%d)
+== 
+
+Team %d (%d/%d)
 == 
 
 Manual
@@ -1311,6 +2133,33 @@ Auto
 == 
 
 Replay
+== 
+
+[skins]
+Body
+== 
+
+[skins]
+Marking
+== 
+
+[skins]
+Decoration
+== 
+
+[skins]
+Hands
+== 
+
+[skins]
+Feet
+== 
+
+[skins]
+Eyes
+== 
+
+Loading sound files
 == 
 
 Follow
@@ -1343,6 +2192,15 @@ Best
 Grabs
 == 
 
+Aim
+== 
+
+Active: Fire
+== 
+
+Active: Hook
+== 
+
 1 new mention
 == 
 
@@ -1350,4 +2208,10 @@ Grabs
 == 
 
 9+ new mentions
+== 
+
+Moved ingame
+== 
+
+https://wiki.ddnet.org/wiki/Mapping
 == 

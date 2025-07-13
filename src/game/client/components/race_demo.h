@@ -3,6 +3,7 @@
 #ifndef GAME_CLIENT_COMPONENTS_RACE_DEMO_H
 #define GAME_CLIENT_COMPONENTS_RACE_DEMO_H
 
+#include <chrono>
 #include <game/client/component.h>
 
 class CRaceDemo : public CComponent
@@ -25,7 +26,7 @@ class CRaceDemo : public CComponent
 	int m_RecordStopTick;
 	int m_Time;
 
-	int64_t m_RaceDemosLoadStartTime = 0;
+	std::chrono::nanoseconds m_RaceDemosLoadStartTime{0};
 
 	static int RaceDemolistFetchCallback(const CFsFileInfo *pInfo, int IsDir, int StorageType, void *pUser);
 
@@ -38,14 +39,13 @@ public:
 	bool m_AllowRestart;
 
 	CRaceDemo();
-	virtual int Sizeof() const override { return sizeof(*this); }
+	int Sizeof() const override { return sizeof(*this); }
 
-	virtual void OnReset() override;
-	virtual void OnStateChange(int NewState, int OldState) override;
-	virtual void OnMessage(int MsgType, void *pRawMsg) override;
-	virtual void OnMapLoad() override;
-	virtual void OnShutdown() override;
-
-	void OnNewSnapshot();
+	void OnReset() override;
+	void OnStateChange(int NewState, int OldState) override;
+	void OnMessage(int MsgType, void *pRawMsg) override;
+	void OnMapLoad() override;
+	void OnShutdown() override;
+	void OnNewSnapshot() override;
 };
 #endif

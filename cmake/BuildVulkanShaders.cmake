@@ -1,4 +1,6 @@
-find_program(GLSLANG_VALIDATOR_PROGRAM glslangValidator)
+find_program(GLSLANG_VALIDATOR_PROGRAM
+  NAMES glslang glslangValidator
+)
 find_program(SPIRV_OPTIMIZER_PROGRAM spirv-opt)
 
 set(GLSLANG_VALIDATOR_PROGRAM_FOUND TRUE)
@@ -21,7 +23,7 @@ if(NOT GLSLANG_VALIDATOR_PROGRAM)
     endif()
   endif()
 
-  if(${GLSLANG_VALIDATOR_PROGRAM_FOUND} EQUAL FALSE)
+  if(NOT GLSLANG_VALIDATOR_PROGRAM_FOUND)
     message(FATAL_ERROR "glslangValidator binary was not found. Did you install the Vulkan SDK / packages ?")
   endif()
 endif()
@@ -43,13 +45,13 @@ if(NOT SPIRV_OPTIMIZER_PROGRAM)
 endif()
 
 file(GLOB_RECURSE GLSL_SHADER_FILES
-  "data/shaders/vulkan/*.frag"
-  "data/shaders/vulkan/*.vert"
+  "data/shader/vulkan/*.frag"
+  "data/shader/vulkan/*.vert"
 )
 
 set(TMP_SHADER_SHA256_LIST "")
 foreach(GLSL_SHADER_FILE ${GLSL_SHADER_FILES})
-  file(SHA256 ${FILE_NAME} TMP_FILE_SHA)
+  file(SHA256 ${GLSL_SHADER_FILE} TMP_FILE_SHA)
   set(TMP_SHADER_SHA256_LIST "${TMP_SHADER_SHA256_LIST}${TMP_FILE_SHA}")
 endforeach(GLSL_SHADER_FILE)
 
@@ -58,11 +60,8 @@ set(GLSL_SHADER_SHA256 "${GLSL_SHADER_SHA256}@v1")
 
 set(FOUND_MATCHING_SHA256_FILE FALSE)
 
-if(EXISTS "${PROJECT_BINARY_DIR}/vulkan_shaders_sha256.txt")
-  file(STRINGS "${PROJECT_BINARY_DIR}/vulkan_shaders_sha256.txt" VULKAN_SHADERS_SHA256_FILE_CONTENT)
-  if("${VULKAN_SHADERS_SHA256_FILE_CONTENT}" STREQUAL "${GLSL_SHADER_SHA256}")
-    set(FOUND_MATCHING_SHA256_FILE TRUE)
-  endif()
+if("${VULKAN_SHADER_FILE_SHA256}" STREQUAL "${GLSL_SHADER_SHA256}")
+  set(FOUND_MATCHING_SHA256_FILE TRUE)
 endif()
 
 set(TW_VULKAN_VERSION "vulkan100")
@@ -137,30 +136,24 @@ if(NOT FOUND_MATCHING_SHA256_FILE)
   generate_shader_file("-DTW_TILE_TEXTURED" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile.frag" "data/shader/vulkan/tile_textured.frag.spv")
   generate_shader_file("-DTW_TILE_TEXTURED" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile.vert" "data/shader/vulkan/tile_textured.vert.spv")
   
-  generate_shader_file("-DTW_TILE_BORDER" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile.frag" "data/shader/vulkan/tile_border.frag.spv")
-  generate_shader_file("-DTW_TILE_BORDER" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile.vert" "data/shader/vulkan/tile_border.vert.spv")
+  generate_shader_file("" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile_border.frag" "data/shader/vulkan/tile_border.frag.spv")
+  generate_shader_file("" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile_border.vert" "data/shader/vulkan/tile_border.vert.spv")
   
-  generate_shader_file("-DTW_TILE_BORDER" "-DTW_TILE_TEXTURED" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile.frag" "data/shader/vulkan/tile_border_textured.frag.spv")
-  generate_shader_file("-DTW_TILE_BORDER" "-DTW_TILE_TEXTURED" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile.vert" "data/shader/vulkan/tile_border_textured.vert.spv")
-  
-  generate_shader_file("-DTW_TILE_BORDER_LINE" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile.frag" "data/shader/vulkan/tile_border_line.frag.spv")
-  generate_shader_file("-DTW_TILE_BORDER_LINE" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile.vert" "data/shader/vulkan/tile_border_line.vert.spv")
-  
-  generate_shader_file("-DTW_TILE_BORDER_LINE" "-DTW_TILE_TEXTURED" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile.frag" "data/shader/vulkan/tile_border_line_textured.frag.spv")
-  generate_shader_file("-DTW_TILE_BORDER_LINE" "-DTW_TILE_TEXTURED" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile.vert" "data/shader/vulkan/tile_border_line_textured.vert.spv")
-  
+  generate_shader_file("" "-DTW_TILE_TEXTURED" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile_border.frag" "data/shader/vulkan/tile_border_textured.frag.spv")
+  generate_shader_file("" "-DTW_TILE_TEXTURED" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/tile_border.vert" "data/shader/vulkan/tile_border_textured.vert.spv")
+
   # quad layer
   generate_shader_file("" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/quad.frag" "data/shader/vulkan/quad.frag.spv")
   generate_shader_file("" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/quad.vert" "data/shader/vulkan/quad.vert.spv")
   
-  generate_shader_file("-DTW_PUSH_CONST" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/quad.frag" "data/shader/vulkan/quad_push.frag.spv")
-  generate_shader_file("-DTW_PUSH_CONST" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/quad.vert" "data/shader/vulkan/quad_push.vert.spv")
+  generate_shader_file("-DTW_QUAD_GROUPED" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/quad.frag" "data/shader/vulkan/quad_grouped.frag.spv")
+  generate_shader_file("-DTW_QUAD_GROUPED" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/quad.vert" "data/shader/vulkan/quad_grouped.vert.spv")
   
   generate_shader_file("-DTW_QUAD_TEXTURED" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/quad.frag" "data/shader/vulkan/quad_textured.frag.spv")
   generate_shader_file("-DTW_QUAD_TEXTURED" "" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/quad.vert" "data/shader/vulkan/quad_textured.vert.spv")
   
-  generate_shader_file("-DTW_QUAD_TEXTURED" "-DTW_PUSH_CONST" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/quad.frag" "data/shader/vulkan/quad_push_textured.frag.spv")
-  generate_shader_file("-DTW_QUAD_TEXTURED" "-DTW_PUSH_CONST" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/quad.vert" "data/shader/vulkan/quad_push_textured.vert.spv")
+  generate_shader_file("-DTW_QUAD_TEXTURED" "-DTW_QUAD_GROUPED" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/quad.frag" "data/shader/vulkan/quad_grouped_textured.frag.spv")
+  generate_shader_file("-DTW_QUAD_TEXTURED" "-DTW_QUAD_GROUPED" "${PROJECT_SOURCE_DIR}/data/shader/vulkan/quad.vert" "data/shader/vulkan/quad_grouped_textured.vert.spv")
 
   execute_process(${GLSLANG_VALIDATOR_COMMAND_LIST} RESULT_VARIABLE STATUS)
   if(STATUS AND NOT STATUS EQUAL 0)
@@ -177,5 +170,5 @@ if(NOT FOUND_MATCHING_SHA256_FILE)
   set(VULKAN_SHADER_FILE_LIST ${VULKAN_SHADER_FILE_LIST} CACHE STRING "Vulkan shader file list" FORCE)
 
   message(STATUS "Finished building vulkan shaders")
-  file(WRITE "${PROJECT_BINARY_DIR}/vulkan_shaders_sha256.txt" "${GLSL_SHADER_SHA256}")
+  set(VULKAN_SHADER_FILE_SHA256 ${GLSL_SHADER_SHA256} CACHE STRING "Vulkan shader file hash" FORCE)
 endif()

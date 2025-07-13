@@ -12,8 +12,8 @@ TEST(CVariableInt, RoundtripPackUnpack)
 	{
 		unsigned char aPacked[CVariableInt::MAX_BYTES_PACKED];
 		int Result;
-		EXPECT_EQ(int(CVariableInt::Pack(aPacked, DATA[i], sizeof(aPacked)) - aPacked), SIZES[i]);
-		EXPECT_EQ(int(CVariableInt::Unpack(aPacked, &Result, sizeof(aPacked)) - aPacked), SIZES[i]);
+		EXPECT_EQ(CVariableInt::Pack(aPacked, DATA[i], sizeof(aPacked)) - aPacked, (ptrdiff_t)SIZES[i]);
+		EXPECT_EQ(CVariableInt::Unpack(aPacked, &Result, sizeof(aPacked)) - aPacked, (ptrdiff_t)SIZES[i]);
 		EXPECT_EQ(Result, DATA[i]);
 	}
 }
@@ -21,16 +21,16 @@ TEST(CVariableInt, RoundtripPackUnpack)
 TEST(CVariableInt, UnpackInvalid)
 {
 	unsigned char aPacked[CVariableInt::MAX_BYTES_PACKED];
-	for(unsigned i = 0; i < sizeof(aPacked); i++)
-		aPacked[i] = 0xFF;
+	for(auto &Byte : aPacked)
+		Byte = 0xFF;
 
 	int Result;
-	EXPECT_EQ(int(CVariableInt::Unpack(aPacked, &Result, sizeof(aPacked)) - aPacked), int(CVariableInt::MAX_BYTES_PACKED));
+	EXPECT_EQ(CVariableInt::Unpack(aPacked, &Result, sizeof(aPacked)) - aPacked, (ptrdiff_t)CVariableInt::MAX_BYTES_PACKED);
 	EXPECT_EQ(Result, (-2147483647 - 1));
 
 	aPacked[0] &= ~0x40; // unset sign bit
 
-	EXPECT_EQ(int(CVariableInt::Unpack(aPacked, &Result, sizeof(aPacked)) - aPacked), int(CVariableInt::MAX_BYTES_PACKED));
+	EXPECT_EQ(CVariableInt::Unpack(aPacked, &Result, sizeof(aPacked)) - aPacked, (ptrdiff_t)CVariableInt::MAX_BYTES_PACKED);
 	EXPECT_EQ(Result, 2147483647);
 }
 
@@ -43,8 +43,8 @@ TEST(CVariableInt, PackBufferTooSmall)
 TEST(CVariableInt, UnpackBufferTooSmall)
 {
 	unsigned char aPacked[CVariableInt::MAX_BYTES_PACKED / 2];
-	for(unsigned i = 0; i < sizeof(aPacked); i++)
-		aPacked[i] = 0xFF; // extended bits are set, but buffer ends too early
+	for(auto &Byte : aPacked)
+		Byte = 0xFF; // extended bits are set, but buffer ends too early
 
 	int UnusedResult;
 	EXPECT_EQ(CVariableInt::Unpack(aPacked, &UnusedResult, sizeof(aPacked)), (const unsigned char *)0x0);
@@ -55,8 +55,8 @@ TEST(CVariableInt, RoundtripCompressDecompress)
 	unsigned char aCompressed[NUM * CVariableInt::MAX_BYTES_PACKED];
 	int aDecompressed[NUM];
 	long ExpectedCompressedSize = 0;
-	for(int i = 0; i < NUM; i++)
-		ExpectedCompressedSize += SIZES[i];
+	for(auto Size : SIZES)
+		ExpectedCompressedSize += Size;
 
 	long CompressedSize = CVariableInt::Compress(DATA, sizeof(DATA), aCompressed, sizeof(aCompressed));
 	ASSERT_EQ(CompressedSize, ExpectedCompressedSize);

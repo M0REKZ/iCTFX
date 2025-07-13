@@ -4,13 +4,13 @@
 
 #include "compression.h"
 
-#include <array> // std::size
+#include <iterator> // std::size
 
 // Format: ESDDDDDD EDDDDDDD EDD... Extended, Data, Sign
 unsigned char *CVariableInt::Pack(unsigned char *pDst, int i, int DstSize)
 {
 	if(DstSize <= 0)
-		return 0;
+		return nullptr;
 
 	DstSize--;
 	*pDst = 0;
@@ -25,7 +25,7 @@ unsigned char *CVariableInt::Pack(unsigned char *pDst, int i, int DstSize)
 	while(i)
 	{
 		if(DstSize <= 0)
-			return 0;
+			return nullptr;
 		*pDst |= 0x80; // set extend bit
 		DstSize--;
 		pDst++;
@@ -40,21 +40,21 @@ unsigned char *CVariableInt::Pack(unsigned char *pDst, int i, int DstSize)
 const unsigned char *CVariableInt::Unpack(const unsigned char *pSrc, int *pInOut, int SrcSize)
 {
 	if(SrcSize <= 0)
-		return 0;
+		return nullptr;
 
 	const int Sign = (*pSrc >> 6) & 1;
 	*pInOut = *pSrc & 0x3F;
 	SrcSize--;
 
-	const static int s_aMasks[] = {0x7F, 0x7F, 0x7F, 0x0F};
-	const static int s_aShifts[] = {6, 6 + 7, 6 + 7 + 7, 6 + 7 + 7 + 7};
+	static const int s_aMasks[] = {0x7F, 0x7F, 0x7F, 0x0F};
+	static const int s_aShifts[] = {6, 6 + 7, 6 + 7 + 7, 6 + 7 + 7 + 7};
 
 	for(unsigned i = 0; i < std::size(s_aMasks); i++)
 	{
 		if(!(*pSrc & 0x80))
 			break;
 		if(SrcSize <= 0)
-			return 0;
+			return nullptr;
 		SrcSize--;
 		pSrc++;
 		*pInOut |= (*pSrc & s_aMasks[i]) << s_aShifts[i];
@@ -72,7 +72,7 @@ long CVariableInt::Decompress(const void *pSrc_, int SrcSize, void *pDst_, int D
 	const unsigned char *pSrc = (unsigned char *)pSrc_;
 	const unsigned char *pSrcEnd = pSrc + SrcSize;
 	int *pDst = (int *)pDst_;
-	const int *pDstEnd = pDst + DstSize / sizeof(int);
+	const int *pDstEnd = pDst + DstSize / sizeof(int); // NOLINT(bugprone-sizeof-expression)
 	while(pSrc < pSrcEnd)
 	{
 		if(pDst >= pDstEnd)

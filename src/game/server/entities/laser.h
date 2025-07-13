@@ -12,11 +12,13 @@ public:
 	CLaser(CGameWorld *pGameWorld, vec2 Pos, vec2 Direction, float StartEnergy, CPlayer *pPlayer, int Type);
 	virtual ~CLaser();
 
-	virtual void Reset() override;
-	virtual void Tick() override;
-	virtual void TickPaused() override;
-	virtual void Snap(int SnappingClient) override;
-	virtual void SwapClients(int Client1, int Client2) override;
+	void Reset() override;
+	void Tick() override;
+	void TickPaused() override;
+	void Snap(int SnappingClient) override;
+	void SwapClients(int Client1, int Client2) override;
+
+	int GetOwnerId() const override { return m_Owner; }
 
 protected:
 	bool HitCharacter(vec2 From, vec2 To);
@@ -31,7 +33,8 @@ private:
 	int m_Bounces;
 	int m_EvalTick;
 	int m_Owner;
-	int m_TeamMask;
+	CClientMask m_TeamMask;
+	bool m_ZeroEnergyBounceInLastTick;
 
 	bool m_DidHit;
 

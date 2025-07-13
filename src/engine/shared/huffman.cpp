@@ -25,7 +25,7 @@ struct CHuffmanConstructNode
 	int m_Frequency;
 };
 
-bool CompareNodesByFrequencyDesc(const CHuffmanConstructNode *pNode1, const CHuffmanConstructNode *pNode2)
+static bool CompareNodesByFrequencyDesc(const CHuffmanConstructNode *pNode1, const CHuffmanConstructNode *pNode2)
 {
 	return pNode2->m_Frequency < pNode1->m_Frequency;
 }
@@ -95,7 +95,7 @@ void CHuffman::Init(const unsigned *pFrequencies)
 	// make sure to cleanout every thing
 	mem_zero(m_aNodes, sizeof(m_aNodes));
 	mem_zero(m_apDecodeLut, sizeof(m_apDecodeLut));
-	m_pStartNode = 0x0;
+	m_pStartNode = nullptr;
 	m_NumNodes = 0;
 
 	// construct the tree
@@ -132,19 +132,25 @@ int CHuffman::Compress(const void *pInput, int InputSize, void *pOutput, int Out
 {
 	// this macro loads a symbol for a byte into bits and bitcount
 #define HUFFMAN_MACRO_LOADSYMBOL(Sym) \
-	Bits |= m_aNodes[Sym].m_Bits << Bitcount; \
-	Bitcount += m_aNodes[Sym].m_NumBits;
+	do \
+	{ \
+		Bits |= m_aNodes[Sym].m_Bits << Bitcount; \
+		Bitcount += m_aNodes[Sym].m_NumBits; \
+	} while(0)
 
 	// this macro writes the symbol stored in bits and bitcount to the dst pointer
 #define HUFFMAN_MACRO_WRITE() \
-	while(Bitcount >= 8) \
+	do \
 	{ \
-		*pDst++ = (unsigned char)(Bits & 0xff); \
-		if(pDst == pDstEnd) \
-			return -1; \
-		Bits >>= 8; \
-		Bitcount -= 8; \
-	}
+		while(Bitcount >= 8) \
+		{ \
+			*pDst++ = (unsigned char)(Bits & 0xff); \
+			if(pDst == pDstEnd) \
+				return -1; \
+			Bits >>= 8; \
+			Bitcount -= 8; \
+		} \
+	} while(0)
 
 	// setup buffer pointers
 	const unsigned char *pSrc = (const unsigned char *)pInput;
@@ -165,23 +171,23 @@ int CHuffman::Compress(const void *pInput, int InputSize, void *pOutput, int Out
 		while(pSrc != pSrcEnd)
 		{
 			// {B} load the symbol
-			HUFFMAN_MACRO_LOADSYMBOL(Symbol)
+			HUFFMAN_MACRO_LOADSYMBOL(Symbol);
 
 			// {C} fetch next symbol, this is done here because it will reduce dependency in the code
 			Symbol = *pSrc++;
 
 			// {B} write the symbol loaded at
-			HUFFMAN_MACRO_WRITE()
+			HUFFMAN_MACRO_WRITE();
 		}
 
 		// write the last symbol loaded from {C} or {A} in the case of only 1 byte input buffer
-		HUFFMAN_MACRO_LOADSYMBOL(Symbol)
-		HUFFMAN_MACRO_WRITE()
+		HUFFMAN_MACRO_LOADSYMBOL(Symbol);
+		HUFFMAN_MACRO_WRITE();
 	}
 
 	// write EOF symbol
-	HUFFMAN_MACRO_LOADSYMBOL(HUFFMAN_EOF_SYMBOL)
-	HUFFMAN_MACRO_WRITE()
+	HUFFMAN_MACRO_LOADSYMBOL(HUFFMAN_EOF_SYMBOL);
+	HUFFMAN_MACRO_WRITE();
 
 	// write out the last bits
 	*pDst++ = Bits;
@@ -207,12 +213,11 @@ int CHuffman::Decompress(const void *pInput, int InputSize, void *pOutput, int O
 	unsigned Bitcount = 0;
 
 	const CNode *pEof = &m_aNodes[HUFFMAN_EOF_SYMBOL];
-	const CNode *pNode = 0;
 
 	while(true)
 	{
 		// {A} try to load a node now, this will reduce dependency at location {D}
-		pNode = 0;
+		const CNode *pNode = nullptr;
 		if(Bitcount >= HUFFMAN_LUTBITS)
 			pNode = m_apDecodeLut[Bits & HUFFMAN_LUTMASK];
 
