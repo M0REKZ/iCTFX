@@ -51,7 +51,12 @@ public:
 	// passing a negative buffer size is undefined behavior
 	int GetBlob(int Col, unsigned char *pBuffer, int BufferSize) override;
 
-	bool AddPoints(const char *pPlayer, int Points, char *pError, int ErrorSize) override;
+	bool GetStats(char const* pPlayer, Stats& stats, char *pError, int ErrorSize) override;
+	bool AddServerStats(char const* pServer, ServerStats const& stats, char *pError, int ErrorSize) override;
+	bool GetServerStats(char const* pServer, ServerStats& stats, char *pError, int ErrorSize) override;
+	bool GetTop5(std::vector<PlayerWithScore> &stats, char* pError, int ErrorSize) override;
+	bool GetRank(char const* pPlayer, int &rank, char *pError, int ErrorSize) override;
+	bool AddStats(char const* pPlayer, Stats const& stats, char *pError, int ErrorSize) override;
 
 	// fail safe
 	bool CreateFailsafeTables();
@@ -395,21 +400,49 @@ void CSqliteConnection::AssertNoError(int Result)
 
 bool CSqliteConnection::AddStats(char const* pPlayer, Stats const& stats, char *pError, int ErrorSize)
 {
-	char aBuf[512];
-	str_format(aBuf, sizeof(aBuf),
-		"INSERT INTO %s_points(Name, Points) "
-		"VALUES (?, ?) "
-		"ON CONFLICT(Name) DO UPDATE SET Points=Points+?",
-		GetPrefix());
-	if(!PrepareStatement(aBuf, pError, ErrorSize))
-	{
-		return false;
-	}
-	BindString(1, pPlayer);
-	BindInt(2, Points);
-	BindInt(3, Points);
-	bool End;
-	return Step(&End, pError, ErrorSize);
+	// char aBuf[512];
+	// str_format(aBuf, sizeof(aBuf),
+	// 	"INSERT INTO %s_points(Name, Points) "
+	// 	"VALUES (?, ?) "
+	// 	"ON CONFLICT(Name) DO UPDATE SET Points=Points+?",
+	// 	GetPrefix());
+	// if(PrepareStatement(aBuf, pError, ErrorSize))
+	// {
+	// 	return true;
+	// }
+	// BindString(1, pPlayer);
+	// BindInt(2, Points);
+	// BindInt(3, Points);
+	// bool End;
+	// return Step(&End, pError, ErrorSize);
+	str_copy(pError, "not implemented", ErrorSize);
+	return true;
+}
+
+bool CSqliteConnection::GetStats(char const* pPlayer, Stats& stats, char *pError, int ErrorSize) {
+	str_copy(pError, "not implemented", ErrorSize);
+	return true;
+}
+
+bool CSqliteConnection::AddServerStats(char const* pServer, ServerStats const& stats, char *pError, int ErrorSize) {
+	str_copy(pError, "not implemented", ErrorSize);
+	return true;
+}
+
+bool CSqliteConnection::GetServerStats(char const* pServer, ServerStats& stats, char *pError, int ErrorSize) {
+	str_copy(pError, "not implemented", ErrorSize);
+	return true;
+}
+
+
+bool CSqliteConnection::GetTop5(std::vector<PlayerWithScore> &stats, char* pError, int ErrorSize) {
+	str_copy(pError, "not implemented", ErrorSize);
+	return true;
+}
+
+bool CSqliteConnection::GetRank(char const* pPlayer, int &rank, char *pError, int ErrorSize) {
+	str_copy(pError, "not implemented", ErrorSize);
+	return true;
 }
 
 std::unique_ptr<IDbConnection> CreateSqliteConnection(const char *pFilename, bool Setup)

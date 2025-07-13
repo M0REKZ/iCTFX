@@ -21,6 +21,7 @@ class IGameController
 {
 
 	std::vector<vec2> m_avSpawnPoints[3];
+	int m_aNumSpawnPoints[3];
 
 	class CGameContext *m_pGameServer;
 	class CConfig *m_pConfig;
@@ -28,7 +29,7 @@ class IGameController
 
 	CGameTeams m_Teams;
 
-protected:
+public:
 	CGameContext *GameServer() const { return m_pGameServer; }
 	CConfig *Config() { return m_pConfig; }
 	IServer *Server() const { return m_pServer; }
@@ -65,6 +66,8 @@ protected:
 	int m_RoundCount;
 
 	int m_GameFlags;
+	int m_UnbalancedTick;
+	bool m_ForceBalanced;
 
 public:
 	const char *m_pGameType;
@@ -156,7 +159,8 @@ public:
 	virtual bool CanJoinTeam(int Team, int NotThisId, char *pErrorReason, int ErrorReasonSize);
 	int ClampTeam(int Team);
 
-	CClientMask GetMaskForPlayerWorldEvent(int Asker, int ExceptID = -1);
+	virtual CClientMask GetMaskForPlayerWorldEvent(int Asker, int ExceptID = -1);
+	virtual bool CanBeMovedOnBalance(int ClientID);
 
 	bool IsTeamPlay() const { return m_GameFlags & GAMEFLAG_TEAMS; }
 	// DDRace

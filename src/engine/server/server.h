@@ -297,7 +297,7 @@ public:
 	void SetClientScore(int ClientId, std::optional<int> Score) override;
 	void SetClientFlags(int ClientId, int Flags) override;
 
-	virtual bool GetClientInput(int ClientID, int Tick, CNetObj_PlayerInput * pInput);
+	virtual bool GetClientInput(int ClientID, int Tick, CNetObj_PlayerInput * pInput) override;
 
 	void Kick(int ClientId, const char *pReason) override;
 	void Ban(int ClientId, int Seconds, const char *pReason, bool VerbatimReason) override;

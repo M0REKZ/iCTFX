@@ -297,7 +297,52 @@ void CGameWorld::SwapClients(int Client1, int Client2)
 
 // TODO: should be more general
 //CCharacter *CGameWorld::IntersectCharacter(vec2 Pos0, vec2 Pos1, float Radius, vec2& NewPos, CEntity *pNotThis)
-CCharacter *CGameWorld::IntersectCharacter(vec2 Pos0, vec2 Pos1, float Radius, vec2 &NewPos, CCharacter *pNotThis, int CollideWith, class CCharacter *pThisOnly, int tick)
+CCharacter *CGameWorld::IntersectCharacter(vec2 Pos0, vec2 Pos1, float Radius, vec2 &NewPos, const CCharacter *pNotThis, int CollideWith, const CCharacter *pThisOnly, int tick)
+{
+	// Find other players
+	float ClosestLen = distance(Pos0, Pos1) * 100.0f;
+	CCharacter *pClosest = 0;
+
+	CCharacter *p = (CCharacter *)FindFirst(ENTTYPE_CHARACTER);
+	for(; p; p = (CCharacter *)p->TypeNext())
+	{
+		if(p == pNotThis)
+			continue;
+
+		if(pThisOnly && p != pThisOnly)
+			continue;
+
+		if(CollideWith != -1 && !p->CanCollide(CollideWith))
+			continue;
+		
+		vec2 pos = p->m_Pos;
+		if(tick > 0)
+		{
+			tick = tick % POSITION_HISTORY;
+			pos = p->m_Positions[tick];
+		}
+
+		vec2 IntersectPos;
+		if(closest_point_on_line(Pos0, Pos1, pos, IntersectPos))
+		{
+			float Len = distance(pos, IntersectPos);
+			if(Len < p->m_ProximityRadius + Radius)
+			{
+				Len = distance(Pos0, IntersectPos);
+				if(Len < ClosestLen)
+				{
+					NewPos = IntersectPos;
+					ClosestLen = Len;
+					pClosest = p;
+				}
+			}
+		}
+	}
+
+	return pClosest;
+}
+
+CEntity *CGameWorld::IntersectEntity(vec2 Pos0, vec2 Pos1, float Radius, int Type, vec2 &NewPos, const CEntity *pNotThis, int CollideWith, const CEntity *pThisOnly)
 {
 	float ClosestLen = distance(Pos0, Pos1) * 100.0f;
 	CEntity *pClosest = nullptr;
@@ -313,19 +358,12 @@ CCharacter *CGameWorld::IntersectCharacter(vec2 Pos0, vec2 Pos1, float Radius, v
 
 		if(CollideWith != -1 && !pEntity->CanCollide(CollideWith))
 			continue;
-		
-		vec2 pos = p->m_Pos;
-		if(tick > 0)
-		{
-			tick = tick % POSITION_HISTORY;
-			pos = p->m_Positions[tick];
-		}
 
 		vec2 IntersectPos;
-		if(closest_point_on_line(Pos0, Pos1, pos, IntersectPos))
+		if(closest_point_on_line(Pos0, Pos1, pEntity->m_Pos, IntersectPos))
 		{
-			float Len = distance(pos, IntersectPos);
-			if(Len < p->m_ProximityRadius + Radius)
+			float Len = distance(pEntity->m_Pos, IntersectPos);
+			if(Len < pEntity->m_ProximityRadius + Radius)
 			{
 				Len = distance(Pos0, IntersectPos);
 				if(Len < ClosestLen)

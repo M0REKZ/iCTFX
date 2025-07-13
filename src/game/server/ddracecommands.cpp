@@ -648,7 +648,7 @@ void CGameContext::ConStop(IConsole::IResult *pResult, void *pUserData)
 	if(!g_Config.m_SvSaveServer) {
 		CGameContext *pSelf = (CGameContext *)pUserData;
 		pSelf->m_World.m_Paused = true;
-			pSelf->SendChat(-1, CHAT_ALL, "Server paused");
+			pSelf->SendChat(-1, TEAM_ALL, "Server paused");
 	}
 }
 
@@ -657,7 +657,7 @@ void CGameContext::ConGo(IConsole::IResult *pResult, void *pUserData)
 	if(!g_Config.m_SvSaveServer) {
 		CGameContext *pSelf = (CGameContext *)pUserData;
 		pSelf->m_pController->m_FakeWarmup = pSelf->Server()->TickSpeed() * g_Config.m_SvGoTime;
-		pSelf->SendChat(-1, CHAT_ALL, "Server continuing");
+		pSelf->SendChat(-1, TEAM_ALL, "Server continuing");
 	}
 }
 
@@ -675,7 +675,7 @@ void CGameContext::ConXonX(IConsole::IResult *pResult, void *pUserData)
 		pSelf->SendBroadcast(aBuf, -1);
 
 		str_format(aBuf, sizeof(aBuf), "The %don%d will start in %d seconds!", Mode, Mode, g_Config.m_SvWarTime);
-		pSelf->SendChat(-1, CHAT_ALL, aBuf);
+		pSelf->SendChat(-1, TEAM_ALL, aBuf);
 	}
 }
 
@@ -684,7 +684,7 @@ void CGameContext::ConReset(IConsole::IResult *pResult, void *pUserData)
 	if(!g_Config.m_SvSaveServer) {
 		CGameContext *pSelf = (CGameContext *)pUserData;
 		g_Config.m_SvSpectatorSlots = 0;
-		pSelf->SendChat(-1, CHAT_ALL, "Reset spectator slots");
+		pSelf->SendChat(-1, TEAM_ALL, "Reset spectator slots");
 	}
 }
 
@@ -729,7 +729,7 @@ void CGameContext::ConShuffleTeams(IConsole::IResult *pResult, void *pUserData)
 			++PlayerTeam;
 	PlayerTeam = (PlayerTeam+1)/2;
 
-	pSelf->SendChat(-1, CGameContext::CHAT_ALL, "Teams were shuffled");
+	pSelf->SendChat(-1, TEAM_ALL, "Teams were shuffled");
 
 	for(int i = 0; i < MAX_CLIENTS; ++i)
 	{

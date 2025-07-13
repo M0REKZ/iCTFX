@@ -172,6 +172,8 @@ bool IGameController::CanSpawn(int Team, vec2 *pOutPos, int DDTeam)
 	if(Team == TEAM_SPECTATORS)
 		return false;
 
+	CSpawnEval Eval;
+
 	if(IsTeamplay())
 	{
 		Eval.m_FriendlyTeam = Team;
@@ -546,19 +548,19 @@ int IGameController::OnCharacterDeath(class CCharacter *pVictim, class CPlayer *
 	pVictim->GetPlayer()->m_Deaths++;
 	if(pKiller == pVictim->GetPlayer())
 	{
-		pVictim->GetPlayer()->m_Score--; // suicide
+		pVictim->GetPlayer()->m_Score.value() -= 1; // suicide
 		pVictim->GetPlayer()->m_Suicides++;
 	}
 	else
 	{
 		if(IsTeamplay() && pVictim->GetPlayer()->GetTeam() == pKiller->GetTeam())
 		{
-			pKiller->m_Score--; // teamkill
+			pKiller->m_Score.value() += 1; // teamkill
 		}
 		else
 		{
-			pKiller->m_Score++; // normal kill
-			pKiller->m_Kills++;
+			pKiller->m_Score.value() += 1; // normal kill
+			pKiller->m_Score.value() += 1;
 		}
 	}
 	pVictim->GetPlayer()->m_RespawnTick = Server()->Tick()+Server()->TickSpeed()*0.5f;
@@ -621,7 +623,7 @@ void IGameController::Tick()
 		if(!m_FakeWarmup && GameServer()->m_World.m_Paused)
 		{
 			GameServer()->m_World.m_Paused = false;
-			GameServer()->SendChat(-1, CGameContext::CHAT_ALL, "Game started");
+			GameServer()->SendChat(-1, TEAM_ALL, "Game started");
 		}
 	}
 
@@ -642,7 +644,7 @@ void IGameController::Tick()
 			if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetTeam() != TEAM_SPECTATORS)
 			{
 				aT[GameServer()->m_apPlayers[i]->GetTeam()]++;
-				aPScore[i] = GameServer()->m_apPlayers[i]->m_Score*Server()->TickSpeed()*60.0f;
+				aPScore[i] = GameServer()->m_apPlayers[i]->m_Score.value() *Server()->TickSpeed()*60.0f;
 				aTScore[GameServer()->m_apPlayers[i]->GetTeam()] += aPScore[i];
 			}
 		}
@@ -849,6 +851,11 @@ void IGameController::Snap(int SnappingClient)
 		protocol7::CNetObj_GameDataRace *pRaceData = Server()->SnapNewItem<protocol7::CNetObj_GameDataRace>(0);
 		if(!pRaceData)
 			return;
+
+		
+		protocol7::CNetObj_GameDataTeam *pTeamData = static_cast<protocol7::CNetObj_GameDataTeam *>(Server()->SnapNewItem(-protocol7::NETOBJTYPE_GAMEDATATEAM, 0, sizeof(protocol7::CNetObj_GameDataTeam)));
+		if(!pTeamData)
+			return;
 		pTeamData->m_TeamscoreBlue = m_aTeamscore[TEAM_BLUE];
 		pTeamData->m_TeamscoreRed = m_aTeamscore[TEAM_RED];
 
@@ -861,7 +868,7 @@ void IGameController::Snap(int SnappingClient)
 			if(m_apFlags[TEAM_RED]->m_AtStand)
 				pFlagData->m_FlagCarrierRed = protocol7::FLAG_ATSTAND;
 			else if(m_apFlags[TEAM_RED]->m_pCarryingCharacter && m_apFlags[TEAM_RED]->m_pCarryingCharacter->GetPlayer())
-				pFlagData->m_FlagCarrierRed = m_apFlags[TEAM_RED]->m_pCarryingCharacter->GetPlayer()->GetCID();
+				pFlagData->m_FlagCarrierRed = m_apFlags[TEAM_RED]->m_pCarryingCharacter->GetPlayer()->GetCid();
 			else
 				pFlagData->m_FlagCarrierRed = protocol7::FLAG_TAKEN;
 		}
@@ -872,7 +879,7 @@ void IGameController::Snap(int SnappingClient)
 			if(m_apFlags[TEAM_BLUE]->m_AtStand)
 				pFlagData->m_FlagCarrierBlue = protocol7::FLAG_ATSTAND;
 			else if(m_apFlags[TEAM_BLUE]->m_pCarryingCharacter && m_apFlags[TEAM_BLUE]->m_pCarryingCharacter->GetPlayer())
-				pFlagData->m_FlagCarrierBlue = m_apFlags[TEAM_BLUE]->m_pCarryingCharacter->GetPlayer()->GetCID();
+				pFlagData->m_FlagCarrierBlue = m_apFlags[TEAM_BLUE]->m_pCarryingCharacter->GetPlayer()->GetCid();
 			else
 				pFlagData->m_FlagCarrierBlue = protocol7::FLAG_TAKEN;
 		}
@@ -1036,17 +1043,17 @@ void IGameController::DoTeamChange(CPlayer *pPlayer, int Team, bool DoChatMsg)
 	// OnPlayerInfoChange(pPlayer);
 }
 
-bool IGameController::IsFriendlyFire(int ClientID1, int ClientID2)
+bool IGameController::IsFriendlyFire(int ClientId1, int ClientId2)
 {
-	if(ClientID1 == ClientID2)
+	if(ClientId1 == ClientId2)
 		return false;
 
 	if(IsTeamplay())
 	{
-		if(!GameServer()->m_apPlayers[ClientID1] || !GameServer()->m_apPlayers[ClientID2])
+		if(!GameServer()->m_apPlayers[ClientId1] || !GameServer()->m_apPlayers[ClientId2])
 			return false;
 
-		if(GameServer()->m_apPlayers[ClientID1]->GetTeam() == GameServer()->m_apPlayers[ClientID2]->GetTeam())
+		if(GameServer()->m_apPlayers[ClientId1]->GetTeam() == GameServer()->m_apPlayers[ClientId2]->GetTeam())
 			return true;
 	}
 
@@ -1062,4 +1069,9 @@ int IGameController::TileFlagsToPickupFlags(int TileFlags) const
 	if(TileFlags & TILEFLAG_ROTATE)
 		PickupFlags |= PICKUPFLAG_ROTATE;
 	return PickupFlags;
+}
+
+bool IGameController::CanBeMovedOnBalance(int ClientID)
+{
+	return true;
 }

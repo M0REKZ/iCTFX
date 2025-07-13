@@ -301,6 +301,9 @@ public:
 	void SendSettings(int ClientId) const;
 	void SendBroadcast(const char *pText, int ClientId, bool IsImportant = true);
 
+	void SendGameMsg(int GameMsgID, int ParaI1, int ClientID);
+	void SendGameMsg(int GameMsgID, int ParaI1, int ParaI2, int ParaI3, int ClientID);
+
 	void List(int ClientId, const char *pFilter);
 
 	//
@@ -313,7 +316,7 @@ public:
 	//
 	void LoadMapSettings();
 
-	virtual void SetPlayer_LastAckedSnapshot(int ClientID, int tick);
+	virtual void SetPlayer_LastAckedSnapshot(int ClientID, int tick) override;
 
 	// engine events
 	void OnInit(const void *pPersistentData) override;
@@ -354,7 +357,7 @@ public:
 	void OnClientDrop(int ClientId, const char *pReason) override;
 	void OnClientPrepareInput(int ClientId, void *pInput) override;
 	void OnClientDirectInput(int ClientId, void *pInput) override;
-	void OnClientPredictedInput(int ClientId, void *pInput) override;
+	void OnClientPredictedInput(int ClientId, void *pInput, int tick) override;
 	void OnClientPredictedEarlyInput(int ClientId, void *pInput) override;
 
 	void PreInputClients(int ClientId, bool *pClients) override;
@@ -481,7 +484,32 @@ private:
 	static void ConGo(IConsole::IResult *pResult, void *pUserData);
 	static void ConXonX(IConsole::IResult *pResult, void *pUserData);
 	static void ConReset(IConsole::IResult *pResult, void *pUserData);
+	static void ConTop5(IConsole::IResult *pResult, void *pUserData);
+	static void ConStats(IConsole::IResult *pResult, void *pUserData);
+	static void ConDrySave(IConsole::IResult *pResult, void *pUserData);
 
+	static void ConRandomMap(IConsole::IResult *pResult, void *pUserData);
+	static void ConRandomUnfinishedMap(IConsole::IResult *pResult, void *pUserData);
+	static void ConDND(IConsole::IResult *pResult, void *pUserData);
+	static void ConWhispers(IConsole::IResult *pResult, void *pUserData);
+	static void ConMapInfo(IConsole::IResult *pResult, void *pUserData);
+	static void ConTimeout(IConsole::IResult *pResult, void *pUserData);
+	static void ConPractice(IConsole::IResult *pResult, void *pUserData);
+	static void ConUnPractice(IConsole::IResult *pResult, void *pUserData);
+	static void ConPracticeCmdList(IConsole::IResult *pResult, void *pUserData);
+	static void ConSwap(IConsole::IResult *pResult, void *pUserData);
+	static void ConCancelSwap(IConsole::IResult *pResult, void *pUserData);
+	static void ConSave(IConsole::IResult *pResult, void *pUserData);
+	static void ConLoad(IConsole::IResult *pResult, void *pUserData);
+	static void ConMap(IConsole::IResult *pResult, void *pUserData);
+	static void ConTeamRank(IConsole::IResult *pResult, void *pUserData);
+	static void ConRank(IConsole::IResult *pResult, void *pUserData);
+	static void ConTeam(IConsole::IResult *pResult, void *pUserData);
+	static void ConLock(IConsole::IResult *pResult, void *pUserData);
+	static void ConUnlock(IConsole::IResult *pResult, void *pUserData);
+	static void ConInvite(IConsole::IResult *pResult, void *pUserData);
+	static void ConJoin(IConsole::IResult *pResult, void *pUserData);
+	static void ConTeam0Mode(IConsole::IResult *pResult, void *pUserData);
 	static void ConMe(IConsole::IResult *pResult, void *pUserData);
 	static void ConWhisper(IConsole::IResult *pResult, void *pUserData);
 	static void ConConverse(IConsole::IResult *pResult, void *pUserData);
@@ -623,5 +651,11 @@ static inline bool CheckClientId(int ClientId)
 {
 	return ClientId >= 0 && ClientId < MAX_CLIENTS;
 }
+
+inline CClientMask CmaskAll() { return -1LL; }
+inline CClientMask CmaskOne(int ClientID) { return 1LL << ClientID; }
+inline CClientMask CmaskUnset(CClientMask Mask, int ClientID) { return Mask ^ CmaskOne(ClientID); }
+inline CClientMask CmaskAllExceptOne(int ClientID) { return CmaskUnset(CmaskAll(), ClientID); }
+inline bool CmaskIsSet(CClientMask Mask, int ClientID) { return (Mask & CmaskOne(ClientID)) != 0; }
 
 #endif

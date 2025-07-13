@@ -1820,7 +1820,6 @@ void CServer::ProcessClientPacket(CNetChunk *pPacket)
 			// GameServer()->SetPlayer_LastAckedSnapshot(ClientID, m_aClients[ClientID].m_LastAckedSnapshot);
 			
 
-			int64_t TagTime;
 			if(m_aClients[ClientId].m_Snapshots.Get(m_aClients[ClientId].m_LastAckedSnapshot, &TagTime, nullptr, nullptr) >= 0)
 				m_aClients[ClientId].m_Latency = (int)(((time_get() - TagTime) * 1000) / time_freq());
 
@@ -3195,7 +3194,7 @@ int CServer::Run()
 					{
 						if(Input.m_GameTick == Tick())
 						{
-							GameServer()->OnClientPredictedInput(c, Input.m_aData);
+							GameServer()->OnClientPredictedInput(c, Input.m_aData, Input.m_AckedTick);
 							ClientHadInput = true;
 							break;
 						}

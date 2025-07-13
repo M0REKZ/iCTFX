@@ -2739,6 +2739,8 @@ if(SERVER)
     entities/dragger.h
     entities/dragger_beam.cpp
     entities/dragger_beam.h
+    entities/flag.cpp
+    entities/flag.h
     entities/gun.cpp
     entities/gun.h
     entities/laser.cpp
@@ -2766,6 +2768,12 @@ if(SERVER)
     gameworld.cpp
     gameworld.h
     mutes.cpp
+    save.cpp
+    save.h
+    score.cpp
+    score.h
+    scoreworker.cpp
+    scoreworker.h
     sql_handler.h
     sql_handler.cpp
     player.cpp

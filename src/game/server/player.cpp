@@ -134,7 +134,7 @@ void CPlayer::Reset()
 	m_Score.reset();
 
 	// Variable initialized:
-	m_Last_Team = 0;
+	//m_Last_Team = 0;
 	m_LastSqlQuery = 0;
 	m_ScoreQueryResult = nullptr;
 	m_ScoreFinishResult = nullptr;
@@ -259,7 +259,7 @@ void CPlayer::Tick()
 
 			bool haveInput = false;
 			CNetObj_PlayerInput input;
-			if(Server()->GetClientInput(GetCID(), Server()->Tick()+i, &input) && g_Config.m_SvPredictionUseInput)
+			if(Server()->GetClientInput(GetCid(), Server()->Tick()+i, &input) && g_Config.m_SvPredictionUseInput)
 			{
 				haveInput = true;
 				pred_core.m_Input = input;
@@ -373,9 +373,9 @@ void CPlayer::Snap(int SnappingClient)
 	pClientInfo->m_ColorBody = m_TeeInfos.m_ColorBody;
 	pClientInfo->m_ColorFeet = m_TeeInfos.m_ColorFeet;
 
-	int SnappingClientVersion = SnappingClient != SERVER_DEMO_CLIENT ? GameServer()->GetClientVersion(SnappingClient) : CLIENT_VERSIONNR;
-	int Latency = SnappingClient == SERVER_DEMO_CLIENT ? m_Latency.m_Min : GameServer()->m_apPlayers[SnappingClient]->m_aCurLatency[m_ClientID];
-	int Score = abs(m_Score);
+	int SnappingClientVersion = SnappingClient != SERVER_DEMO_CLIENT ? GameServer()->GetClientVersion(SnappingClient) : DDNET_VERSION_NUMBER;
+	int Latency = SnappingClient == SERVER_DEMO_CLIENT ? m_Latency.m_Min : GameServer()->m_apPlayers[SnappingClient]->m_aCurLatency[m_ClientId];
+	int Score = std::abs(m_Score.value());
 
 	// send 0 if times of others are not shown
 	if(SnappingClient != m_ClientId && g_Config.m_SvHideScore)
@@ -949,6 +949,10 @@ void CPlayer::SpectatePlayerName(const char *pName)
 			return;
 		}
 	}
+}
+
+void CPlayer::SendChat(const char* message) {
+	GameServer()->SendChatTarget(m_ClientId, message);
 }
 
 void CPlayer::ProcessScoreResult(CScorePlayerResult &Result)

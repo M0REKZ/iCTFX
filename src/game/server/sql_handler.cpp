@@ -15,7 +15,17 @@ int get_proc_count()
 void SqlHandler::get_player_stats_handler(void *ev)
 {
 	auto data = static_cast<GetPlayerStatsData *>(ev);
-	auto database = CreateMysqlConnection(g_Config.m_SqlDatabase, g_Config.m_SqlPrefix, g_Config.m_SqlUser, g_Config.m_SqlPass, g_Config.m_SqlHost, g_Config.m_SqlPort, g_Config.m_SqlSetup);
+	CMysqlConfig gMysqlConfig;
+
+		str_copy(gMysqlConfig.m_aDatabase,g_Config.m_SqlDatabase);
+		str_copy(gMysqlConfig.m_aPrefix,g_Config.m_SqlPrefix);
+		str_copy(gMysqlConfig.m_aUser,g_Config.m_SqlUser);
+		str_copy(gMysqlConfig.m_aPass,g_Config.m_SqlPass);
+		str_copy(gMysqlConfig.m_aIp,g_Config.m_SqlHost);
+		gMysqlConfig.m_Port = g_Config.m_SqlPort;
+		gMysqlConfig.m_Setup = g_Config.m_SqlSetup;
+		gMysqlConfig.m_aBindaddr[0] = '\0';
+	auto database = CreateMysqlConnection(gMysqlConfig);
 	char aError[256] = "error message not initialized";
 	if(database->Connect(aError, sizeof(aError)))
 	{
@@ -60,7 +70,17 @@ void SqlHandler::get_player_stats_handler(void *ev)
 void SqlHandler::set_stats_handler(void *ev)
 {
 	auto data = static_cast<SetStatsData *>(ev);
-	auto database = CreateMysqlConnection(g_Config.m_SqlDatabase, g_Config.m_SqlPrefix, g_Config.m_SqlUser, g_Config.m_SqlPass, g_Config.m_SqlHost, g_Config.m_SqlPort, g_Config.m_SqlSetup);
+	CMysqlConfig gMysqlConfig;
+
+		str_copy(gMysqlConfig.m_aDatabase,g_Config.m_SqlDatabase);
+		str_copy(gMysqlConfig.m_aPrefix,g_Config.m_SqlPrefix);
+		str_copy(gMysqlConfig.m_aUser,g_Config.m_SqlUser);
+		str_copy(gMysqlConfig.m_aPass,g_Config.m_SqlPass);
+		str_copy(gMysqlConfig.m_aIp,g_Config.m_SqlHost);
+		gMysqlConfig.m_Port = g_Config.m_SqlPort;
+		gMysqlConfig.m_Setup = g_Config.m_SqlSetup;
+		gMysqlConfig.m_aBindaddr[0] = '\0';
+	auto database = CreateMysqlConnection(gMysqlConfig);
 	char aError[256] = "error message not initialized";
 	if(database->Connect(aError, sizeof(aError)))
 	{
@@ -78,7 +98,17 @@ void SqlHandler::set_stats_handler(void *ev)
 void SqlHandler::set_server_stats_handler(void *ev)
 {
 	auto data = static_cast<SetServerStatsData *>(ev);
-	auto database = CreateMysqlConnection(g_Config.m_SqlDatabase, g_Config.m_SqlPrefix, g_Config.m_SqlUser, g_Config.m_SqlPass, g_Config.m_SqlHost, g_Config.m_SqlPort, g_Config.m_SqlSetup);
+	CMysqlConfig gMysqlConfig;
+
+		str_copy(gMysqlConfig.m_aDatabase,g_Config.m_SqlDatabase);
+		str_copy(gMysqlConfig.m_aPrefix,g_Config.m_SqlPrefix);
+		str_copy(gMysqlConfig.m_aUser,g_Config.m_SqlUser);
+		str_copy(gMysqlConfig.m_aPass,g_Config.m_SqlPass);
+		str_copy(gMysqlConfig.m_aIp,g_Config.m_SqlHost);
+		gMysqlConfig.m_Port = g_Config.m_SqlPort;
+		gMysqlConfig.m_Setup = g_Config.m_SqlSetup;
+		gMysqlConfig.m_aBindaddr[0] = '\0';
+	auto database = CreateMysqlConnection(gMysqlConfig);
 	char aError[256] = "error message not initialized";
 	if(database->Connect(aError, sizeof(aError)))
 	{
@@ -98,7 +128,17 @@ void SqlHandler::set_server_stats_handler(void *ev)
 void SqlHandler::show_rank_handler(void *ev)
 {
 	auto data = static_cast<GetPlayerStatsData *>(ev);
-	auto database = CreateMysqlConnection(g_Config.m_SqlDatabase, g_Config.m_SqlPrefix, g_Config.m_SqlUser, g_Config.m_SqlPass, g_Config.m_SqlHost, g_Config.m_SqlPort, g_Config.m_SqlSetup);
+	CMysqlConfig gMysqlConfig;
+
+		str_copy(gMysqlConfig.m_aDatabase,g_Config.m_SqlDatabase);
+		str_copy(gMysqlConfig.m_aPrefix,g_Config.m_SqlPrefix);
+		str_copy(gMysqlConfig.m_aUser,g_Config.m_SqlUser);
+		str_copy(gMysqlConfig.m_aPass,g_Config.m_SqlPass);
+		str_copy(gMysqlConfig.m_aIp,g_Config.m_SqlHost);
+		gMysqlConfig.m_Port = g_Config.m_SqlPort;
+		gMysqlConfig.m_Setup = g_Config.m_SqlSetup;
+		gMysqlConfig.m_aBindaddr[0] = '\0';
+	auto database = CreateMysqlConnection(gMysqlConfig);
 	char aError[256] = "error message not initialized";
 	if(database->Connect(aError, sizeof(aError)))
 	{
@@ -126,7 +166,17 @@ void SqlHandler::show_rank_handler(void *ev)
 void SqlHandler::show_top5_handler(void *ev)
 {
 	auto data = static_cast<ShowTop5Data *>(ev);
-	auto database = CreateMysqlConnection(g_Config.m_SqlDatabase, g_Config.m_SqlPrefix, g_Config.m_SqlUser, g_Config.m_SqlPass, g_Config.m_SqlHost, g_Config.m_SqlPort, g_Config.m_SqlSetup);
+	CMysqlConfig gMysqlConfig;
+
+		str_copy(gMysqlConfig.m_aDatabase,g_Config.m_SqlDatabase);
+		str_copy(gMysqlConfig.m_aPrefix,g_Config.m_SqlPrefix);
+		str_copy(gMysqlConfig.m_aUser,g_Config.m_SqlUser);
+		str_copy(gMysqlConfig.m_aPass,g_Config.m_SqlPass);
+		str_copy(gMysqlConfig.m_aIp,g_Config.m_SqlHost);
+		gMysqlConfig.m_Port = g_Config.m_SqlPort;
+		gMysqlConfig.m_Setup = g_Config.m_SqlSetup;
+		gMysqlConfig.m_aBindaddr[0] = '\0';
+	auto database = CreateMysqlConnection(gMysqlConfig);
 	char aError[256] = "error message not initialized";
 	if(database->Connect(aError, sizeof(aError)))
 	{

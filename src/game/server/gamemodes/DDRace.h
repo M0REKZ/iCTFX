@@ -25,20 +25,18 @@ public:
 	void Snap(int SnappingClient);
 	
 	void HandleCharacterTiles(class CCharacter *pChr, int MapIndex) override;
-	bool OnEntity(int Index, vec2 Pos, int Layer, int Flags, int Number) override;
-	void SetArmorProgress(CCharacter *pCharacter, int Progress) override;
+	bool OnEntity(int Index, int x, int y, int Layer, int Flags, bool Initial, int Number = 0) override;
 
 	void OnPlayerConnect(class CPlayer *pPlayer) override;
 	void OnPlayerDisconnect(class CPlayer *pPlayer, const char *pReason) override;
 	void OnPlayerNameChange(class CPlayer *pPlayer) override;
 
-	void OnReset() override;
 
 	void Tick() override;
 
 	void DoTeamChange(class CPlayer *pPlayer, int Team, bool DoChatMsg) override;
 
-	int64_t GetMaskForPlayerWorldEvent(int Asker, int ExceptID = -1) override;
+	CClientMask GetMaskForPlayerWorldEvent(int Asker, int ExceptID = -1) override;
 
 	void InitTeleporter();
 

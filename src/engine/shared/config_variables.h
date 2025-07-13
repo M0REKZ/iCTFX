@@ -257,7 +257,7 @@ MACRO_CONFIG_INT(ClSkipStartMenu, cl_skip_start_menu, 0, 0, 1, CFGFLAG_CLIENT | 
 // server
 MACRO_CONFIG_INT(SvWarmup, sv_warmup, 0, 0, 0, CFGFLAG_SERVER, "Number of seconds to do warmup before round starts")
 MACRO_CONFIG_STR(SvMotd, sv_motd, 900, "", CFGFLAG_SERVER, "Message of the day to display for the clients")
-MACRO_CONFIG_STR(SvGametype, sv_gametype, 32, "ddnet", CFGFLAG_SERVER, "Game type (ddnet, mod)")
+//MACRO_CONFIG_STR(SvGametype, sv_gametype, 32, "ddnet", CFGFLAG_SERVER, "Game type (ddnet, mod)")
 MACRO_CONFIG_INT(SvTournamentMode, sv_tournament_mode, 0, 0, 1, CFGFLAG_SERVER, "Tournament mode. When enabled, players joins the server as spectator")
 MACRO_CONFIG_INT(SvSpamprotection, sv_spamprotection, 1, 0, 1, CFGFLAG_SERVER, "Spam protection for: team change, chat, skin change, emotes and votes")
 
@@ -789,3 +789,24 @@ MACRO_CONFIG_INT(ClVideoRecorderFPS, cl_video_recorder_fps, 60, 1, 1000, CFGFLAG
 /*
  * Add config variables for mods below this comment to avoid merge conflicts.
  */
+
+ //ICTFX
+
+MACRO_CONFIG_INT(SvTeambalanceTime, sv_teambalance_time, 1, 0, 1000, CFGFLAG_SERVER, "How many minutes to wait before autobalancing teams")
+MACRO_CONFIG_INT(SvRollback, sv_rollback, 1, 0, 1, CFGFLAG_SERVER, "Enables / disables rollback support")
+MACRO_CONFIG_INT(SvRollbackShadow, sv_rollback_shadow, 0, 0, 1, CFGFLAG_SERVER, "Shows rollback's shadow for other players by default")
+MACRO_CONFIG_INT(SvAntiZoom, sv_antizoom, 0, 0, 1, CFGFLAG_SERVER, "Limits visability range of players, disabled by default for high ping players")
+MACRO_CONFIG_INT(SvLineOfSight, sv_line_of_sight, 0, 0, 1, CFGFLAG_SERVER, "Limits visability to players in line of sight")
+MACRO_CONFIG_INT(SvLatestTarget, sv_latest_target, 0, 0, 1, CFGFLAG_SERVER, "Shows the latest direction player is looking vs correct timing")
+
+MACRO_CONFIG_INT(SvRunAheadDefault, sv_runahead_default, 0, 0, 100, CFGFLAG_SERVER, "amount of runahead by default")
+MACRO_CONFIG_INT(SvRunAheadSmoothing, sv_runahead_smoothing, 35, 0, 100, CFGFLAG_SERVER, "sets amount of smoothing for runahead")
+MACRO_CONFIG_INT(SvRunAheadLaserOffset, sv_runahead_laser_offset, 1, -10, 10, CFGFLAG_SERVER, "sets amount of smoothing for runahead")
+MACRO_CONFIG_INT(SvPredictionUseInput, sv_prediction_use_input, 1, 0, 1, CFGFLAG_SERVER, "uses buffered inputs to get an more accurate prediction, disable for testing purposes")
+
+MACRO_CONFIG_INT(SvAllowDummy, sv_allow_dummy, 1, 0, 1, CFGFLAG_SERVER, "Allow the use of dummies")
+MACRO_CONFIG_INT(SvAllowZoom, sv_allow_zoom, 0, 0, 1, CFGFLAG_SERVER, "Allow the use of zoom")
+
+MACRO_CONFIG_INT(sv_laser, sv_laser, 1, 0, 1, CFGFLAG_SERVER, "give all players laser")
+MACRO_CONFIG_INT(sv_grenade, sv_grenade, 0, 0, 1, CFGFLAG_SERVER, "give all players grenade")
+MACRO_CONFIG_INT(sv_hammer, sv_hammer, 0, 0, 1, CFGFLAG_SERVER, "give all players hammer")

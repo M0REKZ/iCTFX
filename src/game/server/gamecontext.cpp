@@ -29,6 +29,8 @@
 #include <game/generated/protocol7.h>
 #include <game/generated/protocolglue.h>
 
+#include "score.h"
+
 #include "entities/character.h"
 #include "gamemodes/DDRace.h"
 #include "gamemodes/mod.h"
@@ -1076,7 +1078,7 @@ void CGameContext::SwapTeams()
 	if(!m_pController->IsTeamplay())
 		return;
 
-	SendChat(-1, CGameContext::CHAT_ALL, "Teams were swapped");
+	SendChat(-1, TEAM_ALL, "Teams were swapped");
 
 	for(int i = 0; i < MAX_CLIENTS; ++i)
 	{
@@ -1087,9 +1089,9 @@ void CGameContext::SwapTeams()
 	(void)m_pController->CheckTeamBalance();
 }
 
-void CGameContext::SetPlayer_LastAckedSnapshot(int ClientID, int tick)
+void CGameContext::SetPlayer_LastAckedSnapshot(int ClientId, int tick)
 {
-	m_apPlayers[ClientID]->m_LastAckedSnapshot = tick;
+	m_apPlayers[ClientId]->m_LastAckedSnapshot = tick;
 }
 
 void CGameContext::OnTick()
@@ -1448,15 +1450,18 @@ void CGameContext::OnClientPredictedInput(int ClientId, void *pInput, int tick)
 	if(pInput == nullptr && !m_aPlayerHasInput[ClientId])
 		return;
 
+	if(tick < 0)
+		tick = Server()->Tick();
+
 	// set to last sent input when no new input has been sent
 	CNetObj_PlayerInput *pApplyInput = (CNetObj_PlayerInput *)pInput;
 	if(pApplyInput == nullptr)
 	{
 		pApplyInput = &m_aLastPlayerInput[ClientId];
 	}
-	
-	m_apPlayers[ClientID]->m_LastAckedSnapshot = Server()->Tick() - (Server()->Tick() - tick)*amount;
-	m_apPlayers[ClientID]->m_LAS_leftover = (Server()->Tick() - tick)*(1-amount);
+	float amount = m_apPlayers[ClientId]->m_Rollback_partial;
+	m_apPlayers[ClientId]->m_LastAckedSnapshot = Server()->Tick() - (Server()->Tick() - tick)*amount;
+	m_apPlayers[ClientId]->m_LAS_leftover = (Server()->Tick() - tick)*(1-amount);
 	if(!m_World.m_Paused)
 		m_apPlayers[ClientId]->OnPredictedInput(pApplyInput);
 }
@@ -1600,7 +1605,7 @@ void CGameContext::OnClientEnter(int ClientId)
 	m_pController->OnPlayerConnect(m_apPlayers[ClientId]);
 
 
-	if(Server()->IsSixup(ClientID))
+	if(Server()->IsSixup(ClientId))
 	{
 		{
 			protocol7::CNetMsg_Sv_GameInfo Msg;
@@ -1611,7 +1616,7 @@ void CGameContext::OnClientEnter(int ClientId)
 			Msg.m_MatchNum = 0;
 			Msg.m_ScoreLimit = 0;
 			Msg.m_TimeLimit = 0;
-			Server()->SendPackMsg(&Msg, MSGFLAG_VITAL | MSGFLAG_NORECORD, ClientID);
+			Server()->SendPackMsg(&Msg, MSGFLAG_VITAL | MSGFLAG_NORECORD, ClientId);
 		}
 	}
 	{
@@ -2292,7 +2297,7 @@ void CGameContext::OnSayNetMessage(const CNetMsg_Cl_Say *pMsg, int ClientId, con
 				pPlayer->m_Vote = 1;
 				pPlayer->m_VotePos = ++m_VotePos;
 				m_VoteUpdate = true;
-				SendChat(ClientID, Team, pMsg->m_pMessage, ClientID);
+				SendChat(ClientId, Team, pMsg->m_pMessage, ClientId);
 				return;
 			}
 		}
@@ -2305,7 +2310,7 @@ void CGameContext::OnSayNetMessage(const CNetMsg_Cl_Say *pMsg, int ClientId, con
 			if(pPlayer->GetTeam() != TEAM_SPECTATORS)
 			{
 				ConStop(0, this);
-				SendChat(ClientID, Team, pMsg->m_pMessage, ClientID);
+				SendChat(ClientId, Team, pMsg->m_pMessage, ClientId);
 				return;
 			}
 		}
@@ -2325,7 +2330,7 @@ void CGameContext::OnSayNetMessage(const CNetMsg_Cl_Say *pMsg, int ClientId, con
 				pPlayer->m_Vote = 1;
 				pPlayer->m_VotePos = ++m_VotePos;
 				m_VoteUpdate = true;
-				SendChat(ClientID, Team, pMsg->m_pMessage, ClientID);
+				SendChat(ClientId, Team, pMsg->m_pMessage, ClientId);
 				return;
 			}
 		}
@@ -2345,7 +2350,7 @@ void CGameContext::OnSayNetMessage(const CNetMsg_Cl_Say *pMsg, int ClientId, con
 				pPlayer->m_Vote = 1;
 				pPlayer->m_VotePos = ++m_VotePos;
 				m_VoteUpdate = true;
-				SendChat(ClientID, Team, pMsg->m_pMessage, ClientID);
+				SendChat(ClientId, Team, pMsg->m_pMessage, ClientId);
 				return;
 			}
 		}
@@ -2391,30 +2396,30 @@ void CGameContext::OnSayNetMessage(const CNetMsg_Cl_Say *pMsg, int ClientId, con
 				pPlayer->m_Vote = 1;
 				pPlayer->m_VotePos = ++m_VotePos;
 				m_VoteUpdate = true;
-				SendChat(ClientID, Team, pMsg->m_pMessage, ClientID);
+				SendChat(ClientId, Team, pMsg->m_pMessage, ClientId);
 			}
 		}
 		else if(str_startswith(pMsg->m_pMessage + 1, "rollbackshadow") && !g_Config.m_SvSaveServer)
 		{
 			pPlayer->m_ShowRollbackShadow = !pPlayer->m_ShowRollbackShadow;
 			if(pPlayer->m_ShowRollbackShadow)
-				SendChatTarget(ClientID, "Rollback Shadow enabled");
+				SendChatTarget(ClientId, "Rollback Shadow enabled");
 
 			if(!pPlayer->m_ShowRollbackShadow)
-				SendChatTarget(ClientID, "Rollback Shadow disabled");
+				SendChatTarget(ClientId, "Rollback Shadow disabled");
 		}
 		else if(str_startswith(pMsg->m_pMessage + 1, "rollback_prediction") && !g_Config.m_SvSaveServer)
 		{
 			pPlayer->m_RollbackPrediction = !pPlayer->m_RollbackPrediction;
 
 			if(pPlayer->m_RollbackPrediction)
-				SendChatTarget(ClientID, "Rollback Prediction enabled");
+				SendChatTarget(ClientId, "Rollback Prediction enabled");
 
 			if(!pPlayer->m_RollbackPrediction)
-				SendChatTarget(ClientID, "Rollback Prediction disabled");
+				SendChatTarget(ClientId, "Rollback Prediction disabled");
 
 			if(!g_Config.m_SvRollback)
-				SendChatTarget(ClientID, "Rollback disabled by server vote");
+				SendChatTarget(ClientId, "Rollback disabled by server vote");
 		}
 		else if(str_startswith(pMsg->m_pMessage + 1, "rollback") && !g_Config.m_SvSaveServer)
 		{
@@ -2427,7 +2432,7 @@ void CGameContext::OnSayNetMessage(const CNetMsg_Cl_Say *pMsg, int ClientId, con
 			{
 				disabled = false;
 				pPlayer->m_Rollback_partial = str_toint(pMsg->m_pMessage + 10) / 100.0;
-				pPlayer->m_Rollback_partial = clamp(pPlayer->m_Rollback_partial, 0.0f, 1.0f);
+				pPlayer->m_Rollback_partial = std::clamp(pPlayer->m_Rollback_partial, 0.0f, 1.0f);
 			}
 			else if(!pPlayer->m_Rollback)
 			{
@@ -2437,22 +2442,22 @@ void CGameContext::OnSayNetMessage(const CNetMsg_Cl_Say *pMsg, int ClientId, con
 			pPlayer->m_Rollback = !disabled;
 
 			if(disabled)
-				SendChatTarget(ClientID, "Rollback disabled");
+				SendChatTarget(ClientId, "Rollback disabled");
 
 			if(!g_Config.m_SvRollback)
-				SendChatTarget(ClientID, "Rollback disabled by server vote");
+				SendChatTarget(ClientId, "Rollback disabled by server vote");
 
 			char str[256];
 			str_format(str, sizeof(str), "Rollback enabled (%i%)", (int)(pPlayer->m_Rollback_partial * 100));
 			if(pPlayer->m_Rollback)
-				SendChatTarget(ClientID, str);
+				SendChatTarget(ClientId, str);
 		}
 		else if(str_startswith(pMsg->m_pMessage + 1, "runahead") && !g_Config.m_SvSaveServer)
 		{
 			if(str_startswith(pMsg->m_pMessage + 1, "runahead ") && str_length(pMsg->m_pMessage + 1) >= 10)
 			{
 				pPlayer->m_RunAhead = str_toint(pMsg->m_pMessage + 10) / 100.0;
-				pPlayer->m_RunAhead = clamp(pPlayer->m_RunAhead, 0.0f, 1.0f);
+				pPlayer->m_RunAhead = std::clamp(pPlayer->m_RunAhead, 0.0f, 1.0f);
 			}
 			else
 			{
@@ -2461,7 +2466,7 @@ void CGameContext::OnSayNetMessage(const CNetMsg_Cl_Say *pMsg, int ClientId, con
 
 			char str[256];
 			str_format(str, sizeof(str), "runahead set to %i%\n", (int)(pPlayer->m_RunAhead * 100));
-			SendChatTarget(ClientID, str);
+			SendChatTarget(ClientId, str);
 		}
 		else
 		{
@@ -5403,4 +5408,24 @@ void CGameContext::ReadCensorList()
 bool CGameContext::PracticeByDefault() const
 {
 	return g_Config.m_SvPracticeByDefault && g_Config.m_SvTestingCommands;
+}
+
+void CGameContext::SendGameMsg(int GameMsgID, int ParaI1, int ClientID)
+{
+	CMsgPacker Msg(protocol7::NETMSGTYPE_SV_GAMEMSG);
+	Msg.AddInt(GameMsgID);
+	Msg.AddInt(ParaI1);
+	Msg.m_NoTranslate = true;
+	Server()->SendMsg(&Msg, MSGFLAG_VITAL, ClientID);
+}
+
+void CGameContext::SendGameMsg(int GameMsgID, int ParaI1, int ParaI2, int ParaI3, int ClientID)
+{
+	CMsgPacker Msg(protocol7::NETMSGTYPE_SV_GAMEMSG);
+	Msg.AddInt(GameMsgID);
+	Msg.AddInt(ParaI1);
+	Msg.AddInt(ParaI2);
+	Msg.AddInt(ParaI3);
+	Msg.m_NoTranslate = true;
+	Server()->SendMsg(&Msg, MSGFLAG_VITAL, ClientID);
 }

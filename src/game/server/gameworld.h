@@ -90,7 +90,7 @@ public:
 	 *
 	 * @return Pointer to the closest hit or `nullptr` if there is no intersection.
 	 */
-	CCharacter *IntersectCharacter(vec2 Pos0, vec2 Pos1, float Radius, vec2 &NewPos, const CCharacter *pNotThis = nullptr, int CollideWith = -1, const CCharacter *pThisOnly = nullptr);
+	CCharacter *IntersectCharacter(vec2 Pos0, vec2 Pos1, float Radius, vec2 &NewPos, const CCharacter *pNotThis = nullptr, int CollideWith = -1, const CCharacter *pThisOnly = nullptr, int tick = -1);
 
 	/**
 	 * Finds the CEntity that intersects the line.

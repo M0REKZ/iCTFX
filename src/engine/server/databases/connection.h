@@ -110,12 +110,12 @@ public:
 	virtual int GetBlob(int Col, unsigned char *pBuffer, int BufferSize) = 0;
 
 	// SQL statements, that can't be abstracted, has side effects to the result
-	virtual bool AddStats(char const* pPlayer, Stats const& stats, char *pError, int ErrorSize) = 0;
 	virtual bool GetStats(char const* pPlayer, Stats& stats, char *pError, int ErrorSize) = 0;
 	virtual bool AddServerStats(char const* pServer, ServerStats const& stats, char *pError, int ErrorSize) = 0;
 	virtual bool GetServerStats(char const* pServer, ServerStats& stats, char *pError, int ErrorSize) = 0;
 	virtual bool GetTop5(std::vector<PlayerWithScore> &stats, char* pError, int ErrorSize) = 0;
 	virtual bool GetRank(char const* pPlayer, int &rank, char *pError, int ErrorSize) = 0;
+	virtual bool AddStats(char const* pPlayer, Stats const& stats, char *pError, int ErrorSize) = 0;
 
 private:
 	char m_aPrefix[64];

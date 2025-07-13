@@ -175,6 +175,7 @@ public:
 
 class CCharacterCore
 {
+public:
 	friend class CCharacter;
 	CWorldCore *m_pWorld = nullptr;
 	CCollision *m_pCollision;

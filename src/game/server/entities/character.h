@@ -186,6 +186,7 @@ private:
 	void ForceSetRescue(int RescueMode);
 	void DDRaceTick();
 	void DDRacePostCoreTick();
+	void HandleBroadcast();
 	void HandleTuneLayer();
 	void SendZoneMsgs();
 	IAntibot *Antibot();

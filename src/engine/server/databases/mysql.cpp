@@ -102,7 +102,12 @@ public:
 	void GetString(int Col, char *pBuffer, int BufferSize) override;
 	int GetBlob(int Col, unsigned char *pBuffer, int BufferSize) override;
 
-	bool AddPoints(const char *pPlayer, int Points, char *pError, int ErrorSize) override;
+	bool AddStats(char const* pPlayer, Stats const& stats, char *pError, int ErrorSize) override;
+	virtual bool GetStats(char const* pPlayer, Stats& stats, char *pError, int ErrorSize) override;
+	virtual bool AddServerStats(char const* pServer, ServerStats const& stats, char *pError, int ErrorSize) override;
+	virtual bool GetServerStats(char const* pServer, ServerStats& stats, char *pError, int ErrorSize) override;
+	virtual bool GetTop5(std::vector<PlayerWithScore> &top5, char* pError, int ErrorSize) override;
+	virtual bool GetRank(char const* pPlayer, int &rank, char *pError, int ErrorSize) override;
 
 private:
 	class CStmtDeleter
@@ -866,6 +871,31 @@ bool CMysqlConnection::AddServerStats(char const* pServer, ServerStats const& st
 	return ExecuteUpdate(&NumUpdated, pError, ErrorSize);
 }
 
+bool CMysqlConnection::GetServerStats(char const* pServer, ServerStats& stats, char *pError, int ErrorSize) {
+	char aBuf[4096];
+	str_format(aBuf, sizeof(aBuf),
+		"SELECT red_score, blue_score FROM stats_server WHERE server_name = ?");
+	if(PrepareStatement(aBuf, pError, ErrorSize))
+	{
+		return true;
+	}
+	BindString(1, pServer);
+	bool Last;
+	if(Step(&Last, pError, ErrorSize))
+	{
+		return true;
+	}
+	if(!Last)
+	{
+		stats.score_red = GetInt(1);
+		stats.score_blue = GetInt(2);
+		dbg_msg("mysql", "red: %d", stats.score_red);
+		dbg_msg("mysql", "blue: %d", stats.score_blue);
+	}
+
+	return false;
+}
+
 std::unique_ptr<IDbConnection> CreateMysqlConnection(CMysqlConfig Config)
 {
 	return std::make_unique<CMysqlConnection>(Config);
@@ -882,6 +912,175 @@ int MysqlInit()
 void MysqlUninit()
 {
 }
+
+bool CMysqlConnection::GetStats(char const* pPlayer, Stats& stats, char *pError, int ErrorSize) {
+	char aBuf[4096];
+	str_format(aBuf, sizeof(aBuf),
+		"SELECT kills, deaths, touches, captures, fastest_capture, suicides, shots, wallshots, wallshot_kills FROM stats WHERE name = ?");
+	if(PrepareStatement(aBuf, pError, ErrorSize))
+	{
+		return true;
+	}
+	BindString(1, pPlayer);
+	bool Last;
+	if(Step(&Last, pError, ErrorSize))
+	{
+		return true;
+	}
+
+	if(!Last)
+	{
+		stats.kills = GetInt(1);
+		stats.deaths = GetInt(2);
+		stats.touches = GetInt(3);
+		stats.captures = GetInt(4);
+		stats.fastest_capture = GetInt(5);
+		stats.suicides = GetInt(6);
+		stats.shots = GetInt(7);
+		stats.wallshots = GetInt(8);
+		stats.wallshot_kills = GetInt(9);
+	}
+	return false;
+}
+
+bool CMysqlConnection::GetRank(char const* pPlayer, int &rank, char *pError, int ErrorSize) {
+	char aBuf[4096];
+	str_format(aBuf, sizeof(aBuf),
+" WITH scores AS ("
+"   SELECT"
+"     name,"
+"     captures,"
+"     touches,"
+"     kills,"
+"     suicides,"
+"     captures * 5 + touches + kills - suicides AS score,"
+"     RANK() OVER (ORDER BY score DESC) AS rank"
+"   FROM"
+"     stats"
+"   ORDER BY"
+"     score DESC"
+" )"
+" SELECT"
+"   rank"
+" FROM"
+"   scores"
+" WHERE"
+"   name = ?;");
+	if(PrepareStatement(aBuf, pError, ErrorSize))
+	{
+		return true;
+	}
+	BindString(1, pPlayer);
+	bool Last;
+	if(Step(&Last, pError, ErrorSize))
+	{
+		return true;
+	}
+
+	if(!Last)
+	{
+		rank = GetInt(1);
+	}
+	return false;
+}
+
+bool CMysqlConnection::GetTop5(std::vector<PlayerWithScore> &top5, char* pError, int ErrorSize) {
+	char aBuf[4096];
+	str_format(aBuf, sizeof(aBuf),
+" WITH scores AS ("
+"   SELECT"
+"     name,"
+"     captures,"
+"     touches,"
+"     kills,"
+"     suicides,"
+"     captures * 5 + touches + kills - suicides AS score"
+"   FROM"
+"     stats"
+" )"
+" SELECT"
+"   name,"
+"   score"
+" FROM"
+"   scores"
+" ORDER BY"
+"   score DESC"
+" LIMIT 5;"
+);
+	if(PrepareStatement(aBuf, pError, ErrorSize))
+	{
+		return true;
+	}
+	bool Last;
+	for (;;) {
+		if(Step(&Last, pError, ErrorSize))
+		{
+			return true;
+		}
+
+		if(!Last)
+		{
+			PlayerWithScore pws;
+			;
+			GetString(1, pws.name, 128);
+			pws.score = GetInt(2);
+			top5.push_back(pws);
+		} else {
+			break;
+		}
+	}
+	return false;
+}
+
+bool CMysqlConnection::AddServerStats(char const* pServer, ServerStats const& stats, char *pError, int ErrorSize) {
+	char aBuf[4096];
+	str_format(aBuf, sizeof(aBuf),
+		"INSERT INTO stats_server(server_name, red_score, blue_score)"
+		"VALUES (?, ?, ?) "
+		"ON DUPLICATE KEY UPDATE "
+		"red_score=?, blue_score=?");
+	if(PrepareStatement(aBuf, pError, ErrorSize))
+	{
+		return true;
+	}
+	BindString(1, pServer);
+	BindInt(2, stats.score_red);
+	BindInt(3, stats.score_blue);
+	BindInt(4, stats.score_red);
+	BindInt(5, stats.score_blue);
+	int NumUpdated;
+	if(ExecuteUpdate(&NumUpdated, pError, ErrorSize))
+	{
+		return true;
+	}
+	return false;
+}
+
+bool CMysqlConnection::GetServerStats(char const* pServer, ServerStats& stats, char *pError, int ErrorSize) {
+	char aBuf[4096];
+	str_format(aBuf, sizeof(aBuf),
+		"SELECT red_score, blue_score FROM stats_server WHERE server_name = ?");
+	if(PrepareStatement(aBuf, pError, ErrorSize))
+	{
+		return true;
+	}
+	BindString(1, pServer);
+	bool Last;
+	if(Step(&Last, pError, ErrorSize))
+	{
+		return true;
+	}
+	if(!Last)
+	{
+		stats.score_red = GetInt(1);
+		stats.score_blue = GetInt(2);
+		dbg_msg("mysql", "red: %d", stats.score_red);
+		dbg_msg("mysql", "blue: %d", stats.score_blue);
+	}
+
+	return false;
+}
+
 std::unique_ptr<IDbConnection> CreateMysqlConnection(CMysqlConfig Config)
 {
 	return nullptr;

@@ -373,7 +373,7 @@ void CCharacterCore::Tick(bool UseInput, bool DoDeferredTick)
 				if(m_pCharacter && m_pCharacter->GameServer()->m_apPlayers[m_Id]->m_RunAhead &&
 					g_Config.m_SvRollback && pCharCore->m_pCharacter->m_pPlayer->m_Rollback)
 				{
-					int tick = m_pCharacter->GameServer()->m_apPlayers[pCharCore->m_pCharacter->m_pPlayer->GetCID()]->m_LastAckedSnapshot;
+					int tick = m_pCharacter->GameServer()->m_apPlayers[pCharCore->m_pCharacter->m_pPlayer->GetCid()]->m_LastAckedSnapshot;
 					tick = tick % POSITION_HISTORY;
 					pos.x = pCharCore->m_pCharacter->m_pPlayer->m_CoreAheads[tick].m_X;
 					pos.y = pCharCore->m_pCharacter->m_pPlayer->m_CoreAheads[tick].m_Y;
@@ -382,7 +382,7 @@ void CCharacterCore::Tick(bool UseInput, bool DoDeferredTick)
 				vec2 ClosestPoint;
 				if(closest_point_on_line(hookpos, NewPos, pos, ClosestPoint))
 				{
-					if(distance(pos, ClosestPoint) < PhysSize + 2.0f)
+					if(distance(pos, ClosestPoint) < PhysicalSize() + 2.0f)
 					{
 						if(m_HookedPlayer == -1 || distance(m_HookPos, pos) < Distance)
 						{

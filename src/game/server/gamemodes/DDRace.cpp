@@ -34,7 +34,18 @@ CGameControllerDDRace::CGameControllerDDRace(class CGameContext *pGameServer) :
 	m_aTeamscore[TEAM_BLUE] = 0;
 	
 	if(g_Config.m_SvSaveServer) {
-		auto database = CreateMysqlConnection(g_Config.m_SqlDatabase, g_Config.m_SqlPrefix, g_Config.m_SqlUser, g_Config.m_SqlPass, g_Config.m_SqlHost, g_Config.m_SqlPort, g_Config.m_SqlSetup);
+		CMysqlConfig gMysqlConfig;
+
+		str_copy(gMysqlConfig.m_aDatabase,g_Config.m_SqlDatabase);
+		str_copy(gMysqlConfig.m_aPrefix,g_Config.m_SqlPrefix);
+		str_copy(gMysqlConfig.m_aUser,g_Config.m_SqlUser);
+		str_copy(gMysqlConfig.m_aPass,g_Config.m_SqlPass);
+		str_copy(gMysqlConfig.m_aIp,g_Config.m_SqlHost);
+		gMysqlConfig.m_Port = g_Config.m_SqlPort;
+		gMysqlConfig.m_Setup = g_Config.m_SqlSetup;
+		gMysqlConfig.m_aBindaddr[0] = '\0';
+
+		auto database = CreateMysqlConnection(gMysqlConfig);
 		if(database != nullptr)
 		{
 			char aError[256] = "error message not initialized";
@@ -81,15 +92,15 @@ void CGameControllerDDRace::OnCharacterSpawn(CCharacter *pChr)
 {
 	IGameController::OnCharacterSpawn(pChr);
 	pChr->SetTeams(&m_Teams);
-	pChr->SetTeleports(&m_TeleOuts, &m_TeleCheckOuts);
+	//pChr->SetTeleports(&m_TeleOuts, &m_TeleCheckOuts);
 	GameServer()->Collision()->SetTeleport(&m_TeleOuts);
-	m_Teams.OnCharacterSpawn(pChr->GetPlayer()->GetCID());
+	m_Teams.OnCharacterSpawn(pChr->GetPlayer()->GetCid());
 }
 
 void CGameControllerDDRace::HandleCharacterTiles(CCharacter *pChr, int MapIndex)
 {
 	CPlayer *pPlayer = pChr->GetPlayer();
-	const int ClientID = pPlayer->GetCID();
+	const int ClientId = pPlayer->GetCid();
 
 	int TileIndex = GameServer()->Collision()->GetTileIndex(MapIndex);
 	int TileFIndex = GameServer()->Collision()->GetFrontTileIndex(MapIndex);
@@ -113,31 +124,31 @@ void CGameControllerDDRace::HandleCharacterTiles(CCharacter *pChr, int MapIndex)
 	// start
 	// if(IsOnStartTile && PlayerDDRaceState != DDRACE_CHEAT)
 	// {
-	// 	const int Team = GetPlayerTeam(ClientID);
+	// 	const int Team = GetPlayerTeam(ClientId);
 	// 	if(m_Teams.GetSaving(Team))
 	// 	{
-	// 		GameServer()->SendStartWarning(ClientID, "You can't start while loading/saving of team is in progress");
-	// 		pChr->Die(ClientID, WEAPON_WORLD);
+	// 		GameServer()->SendStartWarning(ClientId, "You can't start while loading/saving of team is in progress");
+	// 		pChr->Die(ClientId, WEAPON_WORLD);
 	// 		return;
 	// 	}
 	// 	if(g_Config.m_SvTeam == SV_TEAM_MANDATORY && (Team == TEAM_FLOCK || m_Teams.Count(Team) <= 1))
 	// 	{
-	// 		GameServer()->SendStartWarning(ClientID, "You have to be in a team with other tees to start");
-	// 		pChr->Die(ClientID, WEAPON_WORLD);
+	// 		GameServer()->SendStartWarning(ClientId, "You have to be in a team with other tees to start");
+	// 		pChr->Die(ClientId, WEAPON_WORLD);
 	// 		return;
 	// 	}
 	// 	if(g_Config.m_SvTeam != SV_TEAM_FORCED_SOLO && Team > TEAM_FLOCK && Team < TEAM_SUPER && m_Teams.Count(Team) < g_Config.m_SvMinTeamSize)
 	// 	{
 	// 		char aBuf[128];
 	// 		str_format(aBuf, sizeof(aBuf), "Your team has fewer than %d players, so your team rank won't count", g_Config.m_SvMinTeamSize);
-	// 		GameServer()->SendStartWarning(ClientID, aBuf);
+	// 		GameServer()->SendStartWarning(ClientId, aBuf);
 	// 	}
 	// 	if(g_Config.m_SvResetPickups)
 	// 	{
 	// 		pChr->ResetPickups();
 	// 	}
 
-	// 	m_Teams.OnCharacterStart(ClientID);
+	// 	m_Teams.OnCharacterStart(ClientId);
 	// 	pChr->m_LastTimeCp = -1;
 	// 	pChr->m_LastTimeCpBroadcasted = -1;
 	// 	for(float &CurrentTimeCp : pChr->m_aCurrentTimeCp)
@@ -148,10 +159,10 @@ void CGameControllerDDRace::HandleCharacterTiles(CCharacter *pChr, int MapIndex)
 
 	// finish
 	// if(((m_TileIndex == TILE_FINISH) || (m_TileFIndex == TILE_FINISH) || FTile1 == TILE_FINISH || FTile2 == TILE_FINISH || FTile3 == TILE_FINISH || FTile4 == TILE_FINISH || Tile1 == TILE_FINISH || Tile2 == TILE_FINISH || Tile3 == TILE_FINISH || Tile4 == TILE_FINISH) && PlayerDDRaceState == DDRACE_STARTED)
-	// 	m_Teams.OnCharacterFinish(ClientID);
+	// 	m_Teams.OnCharacterFinish(ClientId);
 
 	// unlock team
-	if(((m_TileIndex == TILE_UNLOCK_TEAM) || (m_TileFIndex == TILE_UNLOCK_TEAM)) && m_Teams.TeamLocked(GetPlayerTeam(ClientID)))
+	if(((TileIndex == TILE_UNLOCK_TEAM) || (TileFIndex == TILE_UNLOCK_TEAM)) && m_Teams.TeamLocked(GetPlayerTeam(ClientId)))
 	{
 		Teams().SetTeamLock(GameServer()->GetDDRaceTeam(ClientId), false);
 		GameServer()->SendChatTeam(GameServer()->GetDDRaceTeam(ClientId), "Your team was unlocked by an unlock team tile");
@@ -198,7 +209,7 @@ int CGameControllerDDRace::OnCharacterDeath(class CCharacter *pVictim, class CPl
 			{
 				// if(g_Config.m_SvLoltextShow)
 				// 	GameServer()->CreateLolText(pKiller->GetCharacter(), "+1");
-				pKiller->m_Score++;
+				pKiller->m_Score.value() += 1;
 			}
 
 			HadFlag |= 1;
@@ -219,14 +230,14 @@ void CGameControllerDDRace::OnPlayerConnect(CPlayer *pPlayer)
 	IGameController::OnPlayerConnect(pPlayer);
 	int ClientId = pPlayer->GetCid();
 
-	if(!Server()->ClientPrevIngame(ClientID))
+	if(!Server()->ClientPrevIngame(ClientId))
 	{
 		char aBuf[512];
 		str_format(aBuf, sizeof(aBuf), "'%s' entered and joined the %s", Server()->ClientName(ClientId), GetTeamName(pPlayer->GetTeam()));
 		GameServer()->SendChat(-1, TEAM_ALL, aBuf, -1, CGameContext::FLAG_SIX);
 
-		GameServer()->SendChatTarget(ClientID, "welcome to iCTFX!");
-		GameServer()->SendChatTarget(ClientID, "Version: 1.2");
+		GameServer()->SendChatTarget(ClientId, "welcome to iCTFX!");
+		GameServer()->SendChatTarget(ClientId, "Version: 1.2");
 	}
 
 	pPlayer->m_Score = 0;
@@ -242,13 +253,13 @@ void CGameControllerDDRace::OnPlayerConnect(CPlayer *pPlayer)
 
 	if(g_Config.m_SvSaveServer)
 	{
-		sql_handler->get_player_stats(pPlayer, Server()->ClientName(pPlayer->GetCID()));
+		sql_handler->get_player_stats(pPlayer, Server()->ClientName(pPlayer->GetCid()));
 	}
 }
 
 void CGameControllerDDRace::OnPlayerNameChange(class CPlayer *pPlayer)
 {
-	pPlayer->m_Score = 0;
+	pPlayer->m_Score.value() = 0;
 	pPlayer->m_Kills = 0;
 	pPlayer->m_Deaths = 0;
 	pPlayer->m_Touches = 0;
@@ -261,7 +272,7 @@ void CGameControllerDDRace::OnPlayerNameChange(class CPlayer *pPlayer)
 
 	if(g_Config.m_SvSaveServer)
 	{
-		sql_handler->get_player_stats(pPlayer, Server()->ClientName(pPlayer->GetCID()));
+		sql_handler->get_player_stats(pPlayer, Server()->ClientName(pPlayer->GetCid()));
 	}
 }
 
@@ -276,7 +287,7 @@ void CGameControllerDDRace::OnPlayerDisconnect(CPlayer *pPlayer, const char *pRe
 		GameServer()->SendChat(-1, TEAM_ALL, "Server kick/spec votes are no longer actively moderated.");
 
 	if(g_Config.m_SvTeam != SV_TEAM_FORCED_SOLO)
-		m_Teams.SetForceCharacterTeam(ClientID, TEAM_FLOCK);
+		m_Teams.SetForceCharacterTeam(ClientId, TEAM_FLOCK);
 	
 	if(g_Config.m_SvSaveServer)
 	{
@@ -292,7 +303,7 @@ void CGameControllerDDRace::OnPlayerDisconnect(CPlayer *pPlayer, const char *pRe
 		stats.wallshot_kills = pPlayer->m_WallshotKills;
 		stats.suicides = pPlayer->m_Suicides;
 
-		sql_handler->set_stats(Server()->ClientName(pPlayer->GetCID()), stats);
+		sql_handler->set_stats(Server()->ClientName(pPlayer->GetCid()), stats);
 	}
 }
 
@@ -314,7 +325,7 @@ void CGameControllerDDRace::Snap(int SnappingClient)
 		if(m_apFlags[TEAM_RED]->m_AtStand)
 			pGameDataObj->m_FlagCarrierRed = FLAG_ATSTAND;
 		else if(m_apFlags[TEAM_RED]->m_pCarryingCharacter && m_apFlags[TEAM_RED]->m_pCarryingCharacter->GetPlayer())
-			pGameDataObj->m_FlagCarrierRed = m_apFlags[TEAM_RED]->m_pCarryingCharacter->GetPlayer()->GetCID();
+			pGameDataObj->m_FlagCarrierRed = m_apFlags[TEAM_RED]->m_pCarryingCharacter->GetPlayer()->GetCid();
 		else
 			pGameDataObj->m_FlagCarrierRed = FLAG_TAKEN;
 	}
@@ -325,7 +336,7 @@ void CGameControllerDDRace::Snap(int SnappingClient)
 		if(m_apFlags[TEAM_BLUE]->m_AtStand)
 			pGameDataObj->m_FlagCarrierBlue = FLAG_ATSTAND;
 		else if(m_apFlags[TEAM_BLUE]->m_pCarryingCharacter && m_apFlags[TEAM_BLUE]->m_pCarryingCharacter->GetPlayer())
-			pGameDataObj->m_FlagCarrierBlue = m_apFlags[TEAM_BLUE]->m_pCarryingCharacter->GetPlayer()->GetCID();
+			pGameDataObj->m_FlagCarrierBlue = m_apFlags[TEAM_BLUE]->m_pCarryingCharacter->GetPlayer()->GetCid();
 		else
 			pGameDataObj->m_FlagCarrierBlue = FLAG_TAKEN;
 	}
@@ -376,25 +387,25 @@ void CGameControllerDDRace::Tick()
 						// CAPTURE! \o/
 						m_aTeamscore[fi^1] += 100;
 						UpdateServerStats();
-						F->m_pCarryingCharacter->GetPlayer()->m_Score += 5;
-						int playerID = F->m_pCarryingCharacter->GetPlayer()->GetCID();
+						F->m_pCarryingCharacter->GetPlayer()->m_Score.value() += 5;
+						int playerID = F->m_pCarryingCharacter->GetPlayer()->GetCid();
 						
 						// F->m_pCarryingCharacter->GetPlayer()->m_Stats.m_Captures++;
 
 						char aBuf[512];
 						str_format(aBuf, sizeof(aBuf), "flag_capture player='%d:%s'",
-							F->m_pCarryingCharacter->GetPlayer()->GetCID(),
-							Server()->ClientName(F->m_pCarryingCharacter->GetPlayer()->GetCID()));
+							F->m_pCarryingCharacter->GetPlayer()->GetCid(),
+							Server()->ClientName(F->m_pCarryingCharacter->GetPlayer()->GetCid()));
 						GameServer()->Console()->Print(IConsole::OUTPUT_LEVEL_DEBUG, "game", aBuf);
 
 						float CaptureTime = (Server()->Tick() - F->m_GrabTick)/(float)Server()->TickSpeed();
 						if(CaptureTime <= 60)
 						{
-							str_format(aBuf, sizeof(aBuf), "The %s flag was captured by '%s' (%d.%s%d seconds)", fi ? "blue" : "red", Server()->ClientName(F->m_pCarryingCharacter->GetPlayer()->GetCID()), (int)CaptureTime%60, ((int)(CaptureTime*100)%100)<10?"0":"", (int)(CaptureTime*100)%100);
+							str_format(aBuf, sizeof(aBuf), "The %s flag was captured by '%s' (%d.%s%d seconds)", fi ? "blue" : "red", Server()->ClientName(F->m_pCarryingCharacter->GetPlayer()->GetCid()), (int)CaptureTime%60, ((int)(CaptureTime*100)%100)<10?"0":"", (int)(CaptureTime*100)%100);
 						}
 						else
 						{
-							str_format(aBuf, sizeof(aBuf), "The %s flag was captured by '%s'", fi ? "blue" : "red", Server()->ClientName(F->m_pCarryingCharacter->GetPlayer()->GetCID()));
+							str_format(aBuf, sizeof(aBuf), "The %s flag was captured by '%s'", fi ? "blue" : "red", Server()->ClientName(F->m_pCarryingCharacter->GetPlayer()->GetCid()));
 						}
 
 						auto capture_time_millis = CaptureTime*1000;
@@ -457,13 +468,13 @@ void CGameControllerDDRace::Tick()
 						if(!F->m_AtStand)
 						{
 							CCharacter *pChr = apCloseCCharacters[i];
-							pChr->GetPlayer()->m_Score += 1;
+							pChr->GetPlayer()->m_Score.value() += 1;
 							
 
 							char aBuf[256];
 							str_format(aBuf, sizeof(aBuf), "flag_return player='%d:%s'",
-								pChr->GetPlayer()->GetCID(),
-								Server()->ClientName(pChr->GetPlayer()->GetCID()));
+								pChr->GetPlayer()->GetCid(),
+								Server()->ClientName(pChr->GetPlayer()->GetCid()));
 							GameServer()->Console()->Print(IConsole::OUTPUT_LEVEL_DEBUG, "game", aBuf);
 
 							GameServer()->CreateSoundGlobal(SOUND_CTF_RETURN);
@@ -497,14 +508,14 @@ void CGameControllerDDRace::Tick()
 
 						F->m_AtStand = 0;
 						F->m_pCarryingCharacter = apCloseCCharacters[i];
-						F->m_pCarryingCharacter->GetPlayer()->m_Score += 1;
+						F->m_pCarryingCharacter->GetPlayer()->m_Score.value() += 1;
 						F->m_pCarryingCharacter->GetPlayer()->m_Touches++;
 						
 
 						char aBuf[256];
 						str_format(aBuf, sizeof(aBuf), "flag_grab player='%d:%s'",
-							F->m_pCarryingCharacter->GetPlayer()->GetCID(),
-							Server()->ClientName(F->m_pCarryingCharacter->GetPlayer()->GetCID()));
+							F->m_pCarryingCharacter->GetPlayer()->GetCid(),
+							Server()->ClientName(F->m_pCarryingCharacter->GetPlayer()->GetCid()));
 						GameServer()->Console()->Print(IConsole::OUTPUT_LEVEL_DEBUG, "game", aBuf);
 
 						for(int c = 0; c < MAX_CLIENTS; c++)
@@ -513,7 +524,7 @@ void CGameControllerDDRace::Tick()
 							if(!pPlayer)
 								continue;
 
-							if(pPlayer->GetTeam() == TEAM_SPECTATORS && pPlayer->m_SpectatorID != SPEC_FREEVIEW && GameServer()->m_apPlayers[pPlayer->m_SpectatorID] && GameServer()->m_apPlayers[pPlayer->m_SpectatorID]->GetTeam() == fi)
+							if(pPlayer->GetTeam() == TEAM_SPECTATORS && pPlayer->m_SpectatorId != SPEC_FREEVIEW && GameServer()->m_apPlayers[pPlayer->m_SpectatorId] && GameServer()->m_apPlayers[pPlayer->m_SpectatorId]->GetTeam() == fi)
 								GameServer()->CreateSoundGlobal(SOUND_CTF_GRAB_EN, c);
 							else if(pPlayer->GetTeam() == fi)
 								GameServer()->CreateSoundGlobal(SOUND_CTF_GRAB_EN, c);
@@ -544,7 +555,7 @@ void CGameControllerDDRace::Tick()
 					else
 					{
 						F->m_Vel.y += 0.5f; //GameServer()->m_World.m_Core.m_Tuning.m_Gravity;
-						GameServer()->Collision()->MoveBox(&F->m_Pos, &F->m_Vel, vec2(F->ms_PhysSize, F->ms_PhysSize), 0.5f);
+						GameServer()->Collision()->MoveBox(&F->m_Pos, &F->m_Vel, vec2(F->ms_PhysSize, F->ms_PhysSize), vec2(0.5f,0.5f));
 						
 						int index = GameServer()->Collision()->GetMapIndex(F->m_Pos);
 						CCollision * col = GameServer()->Collision();
@@ -603,12 +614,12 @@ void CGameControllerDDRace::Tick()
 			{
 				if(GameServer()->m_apPlayers[i])
 				{
-					if(GameServer()->m_apPlayers[i]->m_Score > Topscore)
+					if(GameServer()->m_apPlayers[i]->m_Score.value() > Topscore)
 					{
-						Topscore = GameServer()->m_apPlayers[i]->m_Score;
+						Topscore = GameServer()->m_apPlayers[i]->m_Score.value();
 						TopscoreCount = 1;
 					}
-					else if(GameServer()->m_apPlayers[i]->m_Score == Topscore)
+					else if(GameServer()->m_apPlayers[i]->m_Score.value() == Topscore)
 						TopscoreCount++;
 				}
 			}
@@ -653,10 +664,12 @@ void CGameControllerDDRace::DoTeamChange(class CPlayer *pPlayer, int Team, bool 
 	IGameController::DoTeamChange(pPlayer, Team, DoChatMsg);
 }
 
-bool CGameControllerDDRace::OnEntity(int Index, vec2 Pos, int Layer, int Flags, int Number)
+bool CGameControllerDDRace::OnEntity(int Index, int x, int y, int Layer, int Flags, bool Initial, int Number)
 {
-	if(IGameController::OnEntity(Index, Pos, Layer, Flags, Number) || idm)
+	if(IGameController::OnEntity(Index, x, y, Layer, Flags, Initial, Number) || idm)
 		return true;
+
+	vec2 Pos = vec2(x,y);
 
 	int Team = -1;
 	if(Index == ENTITY_FLAGSTAND_RED) Team = TEAM_RED;
@@ -674,7 +687,7 @@ bool CGameControllerDDRace::OnEntity(int Index, vec2 Pos, int Layer, int Flags, 
 
 
 
-int64_t CGameControllerDDRace::GetMaskForPlayerWorldEvent(int Asker, int ExceptID)
+CClientMask CGameControllerDDRace::GetMaskForPlayerWorldEvent(int Asker, int ExceptID)
 {
 	if(Asker == -1)
 		return CmaskAllExceptOne(ExceptID);
@@ -709,7 +722,7 @@ void CGameControllerDDRace::InitTeleporter()
 	}
 }
 
-int CGameControllerDDRace::GetPlayerTeam(int ClientID) const
+int CGameControllerDDRace::GetPlayerTeam(int ClientId) const
 {
-	return m_Teams.m_Core.Team(ClientID);
+	return m_Teams.m_Core.Team(ClientId);
 }

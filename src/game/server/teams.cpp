@@ -13,12 +13,6 @@
 #include "teams.h"
 #include "teehistorian.h"
 
-enum
-{
-	NUM_CHECKPOINTS = 25,
-	TIMESTAMP_STR_LENGTH = 20, // 2019-04-02 19:38:36
-};
-
 CGameTeams::CGameTeams(CGameContext *pGameContext) :
 	m_pGameContext(pGameContext)
 {
@@ -43,8 +37,8 @@ void CGameTeams::Reset()
 		m_aTeamFlock[i] = false;
 		m_apSaveTeamResult[i] = nullptr;
 		m_aTeamSentStartWarning[i] = false;
-		m_TeamSentStartWarning[i] = false;
-		m_TeamUnfinishableKillTick[i] = -1;
+		m_aTeamSentStartWarning[i] = false;
+		m_aTeamUnfinishableKillTick[i] = -1;
 		if(m_pGameContext->PracticeByDefault())
 			m_aPractice[i] = true;
 		ResetRoundState(i);

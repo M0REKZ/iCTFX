@@ -131,7 +131,7 @@ public:
 
 	int m_DieTick;
 	int m_PreviousDieTick;
-	std::atomic<int> m_Score;
+	std::optional<int> m_Score;
 	std::atomic<int> m_Kills;
 	std::atomic<int> m_Deaths;
 	std::atomic<int> m_Touches;
@@ -143,8 +143,10 @@ public:
 	std::atomic<int> m_WallshotKills;
 	
 	int m_JoinTick;
+	bool m_ForceBalanced;
 	int m_LastActionTick;
 	int m_TeamChangeTick;
+	bool m_SentSemicolonTip;
 
 	// network latency calculations
 	struct

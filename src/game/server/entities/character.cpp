@@ -468,26 +468,13 @@ void CCharacter::FireWeapon()
 	vec2 MouseTarget = vec2(m_LatestInput.m_TargetX, m_LatestInput.m_TargetY);
 	vec2 Direction = normalize(MouseTarget);
 
-	bool FullAuto = false;
-	if(m_Core.m_ActiveWeapon == WEAPON_GRENADE || m_Core.m_ActiveWeapon == WEAPON_SHOTGUN || m_Core.m_ActiveWeapon == WEAPON_LASER)
-		FullAuto = true;
-	if(m_Core.m_Jetpack && m_Core.m_ActiveWeapon == WEAPON_GUN)
-		FullAuto = true;
-	// allow firing directly after coming out of freeze or being unfrozen
-	// by something
-	if(m_FrozenLastTick)
-		FullAuto = true;
-
-	// don't fire hammer when player is deep and sv_deepfly is disabled
-	if(!g_Config.m_SvDeepfly && m_Core.m_ActiveWeapon == WEAPON_HAMMER && m_Core.m_DeepFrozen)
-		return;
 
 	// check if we gonna fire
 	bool WillFire = false;
 	if(CountInput(m_LatestPrevInput.m_Fire, m_LatestInput.m_Fire).m_Presses)
 		WillFire = true;
 
-	if(FullAuto && (m_LatestInput.m_Fire & 1) && m_Core.m_aWeapons[m_Core.m_ActiveWeapon].m_Ammo)
+	if(m_LatestInput.m_Fire & 1)
 		WillFire = true;
 
 	if(!WillFire)
@@ -499,18 +486,23 @@ void CCharacter::FireWeapon()
 		if(m_PainSoundTimer <= 0 && !(m_LatestPrevInput.m_Fire & 1))
 		{
 			m_PainSoundTimer = 1 * Server()->TickSpeed();
-			GameServer()->CreateSound(m_Pos, SOUND_PLAYER_PAIN_LONG, TeamMask()); // NOLINT(clang-analyzer-unix.Malloc)
+			GameServer()->CreateSound(m_Pos, SOUND_PLAYER_PAIN_LONG, Teams()->TeamMask(Team(), -1, m_pPlayer->GetCid()));
 		}
 		return;
 	}
 
 	// check for ammo
-	if(!m_Core.m_aWeapons[m_Core.m_ActiveWeapon].m_Ammo)
+	if(m_Core.m_ActiveWeapon == WEAPON_GRENADE && !m_Core.m_aWeapons[m_Core.m_ActiveWeapon].m_Ammo)
+	{
+		// 125ms is a magical limit of how fast a human can click
+		m_ReloadTimer = 125 * Server()->TickSpeed() / 1000;
+		GameServer()->CreateSound(m_Pos, SOUND_WEAPON_NOAMMO);
 		return;
+	}
 
 	if(m_Core.m_ActiveWeapon == WEAPON_GRENADE)
 	{
-		m_aWeapons[WEAPON_GRENADE].m_Ammo--;
+		m_Core.m_aWeapons[WEAPON_GRENADE].m_Ammo--;
 	}
 
 	vec2 ProjStartPos = m_Pos + Direction * GetProximityRadius() * 0.75f;
@@ -603,7 +595,7 @@ void CCharacter::FireWeapon()
 	{
 		float LaserReach = GetTuning(m_TuneZone)->m_LaserReach;
 
-		new CLaser(&GameServer()->m_World, m_Pos, Direction, LaserReach, m_pPlayer->GetCid(), WEAPON_SHOTGUN);
+		new CLaser(&GameServer()->m_World, m_Pos, Direction, LaserReach, m_pPlayer, WEAPON_SHOTGUN);
 		GameServer()->CreateSound(m_Pos, SOUND_SHOTGUN_FIRE, TeamMask()); // NOLINT(clang-analyzer-unix.Malloc)
 	}
 	break;
@@ -633,7 +625,7 @@ void CCharacter::FireWeapon()
 	{
 		float LaserReach = GetTuning(m_TuneZone)->m_LaserReach;
 
-		new CLaser(GameWorld(), m_Pos, Direction, LaserReach, m_pPlayer->GetCid(), WEAPON_LASER);
+		new CLaser(GameWorld(), m_Pos, Direction, LaserReach, m_pPlayer, WEAPON_LASER);
 		GameServer()->CreateSound(m_Pos, SOUND_LASER_FIRE, TeamMask()); // NOLINT(clang-analyzer-unix.Malloc)
 	}
 	break;
@@ -791,10 +783,10 @@ void CCharacter::PreTick()
 		return;
 	
 	if(Server()->Tick() % 50*3 == 0)
-		m_aWeapons[WEAPON_GRENADE].m_Ammo++;
+		m_Core.m_aWeapons[WEAPON_GRENADE].m_Ammo++;
 	
-	if(m_aWeapons[WEAPON_GRENADE].m_Ammo > 4)
-		m_aWeapons[WEAPON_GRENADE].m_Ammo = 4;
+	if(m_Core.m_aWeapons[WEAPON_GRENADE].m_Ammo > 4)
+		m_Core.m_aWeapons[WEAPON_GRENADE].m_Ammo = 4;
 
 	// set emote
 	if(m_EmoteStop < Server()->Tick())
@@ -1012,12 +1004,12 @@ void CCharacter::Die(int Killer, int Weapon, int tick)
 		m_DeathPos = m_Positions[(GameServer()->m_apPlayers[m_Killer]->m_LastAckedSnapshot-1) % POSITION_HISTORY];
 	}
 
-	if(m_Killer >= 0 && m_Killer != m_pPlayer->GetCID() && GameServer()->m_apPlayers[m_Killer])
+	if(m_Killer >= 0 && m_Killer != m_pPlayer->GetCid() && GameServer()->m_apPlayers[m_Killer])
 	{
-		int Mask = CmaskOne(m_Killer);
+		CClientMask Mask = CmaskOne(m_Killer);
 		for(int i = 0; i < MAX_CLIENTS; i++)
 		{
-			if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetTeam() == TEAM_SPECTATORS && GameServer()->m_apPlayers[i]->m_SpectatorID == m_Killer)
+			if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetTeam() == TEAM_SPECTATORS && GameServer()->m_apPlayers[i]->m_SpectatorId == m_Killer)
 				Mask |= CmaskOne(i);
 		}
 		GameServer()->CreateSound(GameServer()->m_apPlayers[m_Killer]->m_ViewPos, SOUND_HIT, Mask);
@@ -1048,7 +1040,7 @@ void CCharacter::Death()
 	}
 
 	// set attacker's face to happy (taunt!)
-	if (m_Killer >= 0 && m_Killer != m_pPlayer->GetCID() && GameServer()->m_apPlayers[m_Killer])
+	if (m_Killer >= 0 && m_Killer != m_pPlayer->GetCid() && GameServer()->m_apPlayers[m_Killer])
 	{
 		CCharacter *pChr = GameServer()->m_apPlayers[m_Killer]->GetCharacter();
 		if (pChr)
@@ -1064,8 +1056,8 @@ void CCharacter::Death()
 	int Killer = m_Killer;
 	int Weapon = m_KillerWeapon;
 
-	if(Server()->IsRecording(m_pPlayer->GetCID()))
-		Server()->StopRecord(m_pPlayer->GetCID());
+	if(Server()->IsRecording(m_pPlayer->GetCid()))
+		Server()->StopRecord(m_pPlayer->GetCid());
 }
 
 void CCharacter::StopRecording()
@@ -1081,58 +1073,6 @@ void CCharacter::StopRecording()
 
 		pData->m_RecordStopTick = -1;
 	}
-}
-
-void CCharacter::Die(int Killer, int Weapon, bool SendKillMsg)
-{
-	if(Killer != WEAPON_GAME && m_SetSavePos[RESCUEMODE_AUTO])
-		GetPlayer()->m_LastDeath = m_RescueTee[RESCUEMODE_AUTO];
-	StopRecording();
-	int ModeSpecial = GameServer()->m_pController->OnCharacterDeath(this, GameServer()->m_apPlayers[Killer], Weapon);
-
-	char aBuf[256];
-	str_format(aBuf, sizeof(aBuf), "kill killer='%d:%s' victim='%d:%s' weapon=%d special=%d",
-		Killer, Server()->ClientName(Killer),
-		m_pPlayer->GetCid(), Server()->ClientName(m_pPlayer->GetCid()), Weapon, ModeSpecial);
-	GameServer()->Console()->Print(IConsole::OUTPUT_LEVEL_DEBUG, "game", aBuf);
-
-	if(GameServer()->GetPlayerChar(Killer) && Killer != m_pPlayer->GetCID())
-		GameServer()->GetPlayerChar(Killer)->AddSpree();
-	EndSpree(Killer);
-
-	// send the kill message
-	if(SendKillMsg && (Team() == TEAM_FLOCK || Teams()->TeamFlock(Team()) || Teams()->Count(Team()) == 1 || Teams()->GetTeamState(Team()) == ETeamState::OPEN || !Teams()->TeamLocked(Team())))
-	{
-		CNetMsg_Sv_KillMsg Msg;
-		Msg.m_Killer = Killer;
-		Msg.m_Victim = m_pPlayer->GetCid();
-		Msg.m_Weapon = Weapon;
-		Msg.m_ModeSpecial = ModeSpecial;
-		Server()->SendPackMsg(&Msg, MSGFLAG_VITAL, -1);
-	}
-
-	// a nice sound
-	GameServer()->CreateSound(m_Pos, SOUND_PLAYER_DIE, TeamMask());
-
-	// this is to rate limit respawning to 3 secs
-	m_pPlayer->m_PreviousDieTick = m_pPlayer->m_DieTick;
-	m_pPlayer->m_DieTick = Server()->Tick();
-
-	m_Alive = false;
-	SetSolo(false);
-
-	GameServer()->m_World.RemoveEntity(this);
-	GameServer()->m_World.m_Core.m_apCharacters[m_pPlayer->GetCid()] = nullptr;
-	GameServer()->CreateDeath(m_Pos, m_pPlayer->GetCid(), TeamMask());
-	Teams()->OnCharacterDeath(GetPlayer()->GetCid(), Weapon);
-
-	// Cancel swap requests
-	for(auto &pPlayer : GameServer()->m_apPlayers)
-	{
-		if(pPlayer && pPlayer->m_SwapTargetsClientId == GetPlayer()->GetCid())
-			pPlayer->m_SwapTargetsClientId = -1;
-	}
-	GetPlayer()->m_SwapTargetsClientId = -1;
 }
 
 bool CCharacter::TakeDamage(vec2 Force, int Dmg, int From, int Weapon, int tick)
@@ -1165,12 +1105,12 @@ bool CCharacter::TakeDamage(vec2 Force, int Dmg, int From, int Weapon, int tick)
 	m_DamageTakenTick = Server()->Tick();
 
 	// do damage Hit sound
-	if(From >= 0 && From != m_pPlayer->GetCID() && GameServer()->m_apPlayers[From])
+	if(From >= 0 && From != m_pPlayer->GetCid() && GameServer()->m_apPlayers[From])
 	{
-		int64_t Mask = CmaskOne(From);
+		CClientMask Mask = CmaskOne(From);
 		for(int i = 0; i < MAX_CLIENTS; i++)
 		{
-			if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetTeam() == TEAM_SPECTATORS && GameServer()->m_apPlayers[i]->m_SpectatorID == From)
+			if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetTeam() == TEAM_SPECTATORS && GameServer()->m_apPlayers[i]->m_SpectatorId == From)
 				Mask |= CmaskOne(i);
 		}
 		GameServer()->CreateSound(GameServer()->m_apPlayers[From]->m_ViewPos, SOUND_HIT, Mask);
@@ -1182,7 +1122,7 @@ bool CCharacter::TakeDamage(vec2 Force, int Dmg, int From, int Weapon, int tick)
 		Die(From, Weapon);
 
 		// set attacker's face to happy (taunt!)
-		if (From >= 0 && From != m_pPlayer->GetCID() && GameServer()->m_apPlayers[From])
+		if (From >= 0 && From != m_pPlayer->GetCid() && GameServer()->m_apPlayers[From])
 		{
 			CCharacter *pChr = GameServer()->m_apPlayers[From]->GetCharacter();
 			if (pChr)
@@ -1198,8 +1138,8 @@ bool CCharacter::TakeDamage(vec2 Force, int Dmg, int From, int Weapon, int tick)
 	if (Dmg > 2)
 		GameServer()->CreateSound(m_Pos, SOUND_PLAYER_PAIN_LONG);
 	else
-		GameServer()->CreateSound(m_Pos, SOUND_PLAYER_PAIN_SHORT);*/
-	if(GameServer()->m_pController->IsFriendlyFire(m_pPlayer->GetCID(), From))
+		GameServer()->CreateSound(m_Pos, SOUND_PLAYER_PAIN_SHORT);
+	if(GameServer()->m_pController->IsFriendlyFire(m_pPlayer->GetCid(), From))
 		return false;
 
 	// do damage Hit sound
@@ -1212,13 +1152,13 @@ bool CCharacter::TakeDamage(vec2 Force, int Dmg, int From, int Weapon, int tick)
 	vec2 Temp = m_Core.m_Vel + Force;
 	m_Core.m_Vel = ClampVel(m_MoveRestrictions, Temp);
 
-	if(WEAPON_GRENADE == Weapon && From == m_pPlayer->GetCID())
-		m_aWeapons[WEAPON_GRENADE].m_Ammo++;
+	if(WEAPON_GRENADE == Weapon && From == m_pPlayer->GetCid())
+		m_Core.m_aWeapons[WEAPON_GRENADE].m_Ammo++;
 
 	if(WEAPON_GRENADE == Weapon && Dmg < 4)
 		return false;
 	
-	if(m_pPlayer->GetCID() == From)
+	if(m_pPlayer->GetCid() == From)
 		return false;
 	
 	m_Health--;
@@ -1231,10 +1171,10 @@ bool CCharacter::TakeDamage(vec2 Force, int Dmg, int From, int Weapon, int tick)
 		return false;
 	}else
 	{
-		int Mask = CmaskOne(m_Killer);
+		CClientMask Mask = CmaskOne(m_Killer);
 		for(int i = 0; i < MAX_CLIENTS; i++)
 		{
-			if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetTeam() == TEAM_SPECTATORS && GameServer()->m_apPlayers[i]->m_SpectatorID == m_Killer)
+			if(GameServer()->m_apPlayers[i] && GameServer()->m_apPlayers[i]->GetTeam() == TEAM_SPECTATORS && GameServer()->m_apPlayers[i]->m_SpectatorId == m_Killer)
 				Mask |= CmaskOne(i);
 		}
 		GameServer()->CreateSound(GameServer()->m_apPlayers[m_Killer]->m_ViewPos, SOUND_HIT, Mask);
@@ -1332,7 +1272,7 @@ void CCharacter::SnapCharacter(int SnappingClient, int Id)
 	{
 		int seePrediction = 0;
 
-		if(SnappingClient >= 0 && m_pPlayer->m_Rollback && m_pPlayer->GetCID() != SnappingClient)
+		if(SnappingClient >= 0 && m_pPlayer->m_Rollback && m_pPlayer->GetCid() != SnappingClient)
 		{
 			if(!seePrediction)
 				seePrediction = Server()->Tick();
@@ -1340,7 +1280,7 @@ void CCharacter::SnapCharacter(int SnappingClient, int Id)
 			seePrediction -= (Server()->Tick() - m_pPlayer->m_LastAckedSnapshot)*GameServer()->m_apPlayers[SnappingClient]->m_RunAhead;
 		}
 
-		if(SnappingClient >= 0 && m_pPlayer->GetCID() != SnappingClient &&
+		if(SnappingClient >= 0 && m_pPlayer->GetCid() != SnappingClient &&
 			GameServer()->m_apPlayers[SnappingClient]->m_RollbackPrediction && GameServer()->m_apPlayers[SnappingClient]->m_Rollback)
 		{
 			if(!seePrediction)
@@ -1351,7 +1291,7 @@ void CCharacter::SnapCharacter(int SnappingClient, int Id)
 		}
 
 		if(SnappingClient >= 0 && GameServer()->m_apPlayers[SnappingClient]->GetCharacter() &&
-			GameServer()->m_apPlayers[SnappingClient]->GetCharacter()->m_Core.m_HookedPlayer == m_pPlayer->GetCID())
+			GameServer()->m_apPlayers[SnappingClient]->GetCharacter()->m_Core.m_HookedPlayer == m_pPlayer->GetCid())
 		{
 			seePrediction = 0;
 		}
@@ -1362,7 +1302,7 @@ void CCharacter::SnapCharacter(int SnappingClient, int Id)
 		if(seePrediction && m_pPlayer->m_DeadAheads[seePrediction % POSITION_HISTORY])
 			return;
 
-		CNetObj_Character *pCharacter = static_cast<CNetObj_Character *>(Server()->SnapNewItem(NETOBJTYPE_CHARACTER, ID, sizeof(CNetObj_Character)));
+		CNetObj_Character *pCharacter = static_cast<CNetObj_Character *>(Server()->SnapNewItem(NETOBJTYPE_CHARACTER, Id, sizeof(CNetObj_Character)));
 		if(!pCharacter)
 			return;
 
@@ -1512,7 +1452,7 @@ void CCharacter::Snap(int SnappingClient)
 	if((NetworkClipped(SnappingClient) || !CanSnapCharacter(SnappingClient)) && g_Config.m_SvAntiZoom)
 		return;
 	
-	if(g_Config.m_SvLineOfSight && SnappingClient >= 0 && m_pPlayer->GetCID() != SnappingClient && GameServer()->m_apPlayers[SnappingClient]->GetCharacter())
+	if(g_Config.m_SvLineOfSight && SnappingClient >= 0 && m_pPlayer->GetCid() != SnappingClient && GameServer()->m_apPlayers[SnappingClient]->GetCharacter())
 	{
 		CCharacter * snapChar = GameServer()->m_apPlayers[SnappingClient]->GetCharacter();
 		if(!GameServer()->CheckSightVisibility(snapChar, m_Pos, CCharacter::ms_PhysSize, this))
@@ -1573,15 +1513,15 @@ void CCharacter::Snap(int SnappingClient)
 	pDDNetCharacter->m_Jumps = m_Core.m_Jumps;
 	pDDNetCharacter->m_TeleCheckpoint = m_TeleCheckpoint;
 
-	if(SnappingClient != ID && SnappingClient >= 0 && m_pPlayer && m_pPlayer->m_Rollback && GameServer()->m_apPlayers[SnappingClient]->m_ShowRollbackShadow && GameServer()->m_apPlayers[SnappingClient]->GetCharacter())
+	if(SnappingClient != Id && SnappingClient >= 0 && m_pPlayer && m_pPlayer->m_Rollback && GameServer()->m_apPlayers[SnappingClient]->m_ShowRollbackShadow && GameServer()->m_apPlayers[SnappingClient]->GetCharacter())
 	{
-		CNetObj_Pickup *pShadow = static_cast<CNetObj_Pickup *>(Server()->SnapNewItem(NETOBJTYPE_PICKUP, ID+64, sizeof(CNetObj_Pickup)));
+		CNetObj_Pickup *pShadow = static_cast<CNetObj_Pickup *>(Server()->SnapNewItem(NETOBJTYPE_PICKUP, Id+64, sizeof(CNetObj_Pickup)));
 
 		vec2 pos = GameServer()->m_apPlayers[SnappingClient]->GetCharacter()->m_Positions[m_pPlayer->m_LastAckedSnapshot % POSITION_HISTORY];
 		pShadow->m_X = (int)pos.x;
 		pShadow->m_Y = (int)pos.y;
 		pShadow->m_Subtype = 0;
-		pShadow->m_Type = ID % NUM_POWERUPS;
+		pShadow->m_Type = Id % NUM_POWERUPS;
 	}
 	pDDNetCharacter->m_StrongWeakId = m_StrongWeakId;
 
@@ -2633,8 +2573,8 @@ void CCharacter::AddSpree()
 		static const char aaSpreeMsg[NumMsg][32] = { "is on a killing spree", "is on a rampage", "is dominating", "is unstoppable", "is godlike"};
 		int No = m_pPlayer->m_Spree/NumMsg-1;
 
-		str_format(aBuf, sizeof(aBuf), "%s %s with %d kills!", Server()->ClientName(m_pPlayer->GetCID()), aaSpreeMsg[(No > NumMsg-1) ? NumMsg-1 : No], m_pPlayer->m_Spree);
-		GameServer()->SendChat(-1, CGameContext::CHAT_ALL, aBuf);
+		str_format(aBuf, sizeof(aBuf), "%s %s with %d kills!", Server()->ClientName(m_pPlayer->GetCid()), aaSpreeMsg[(No > NumMsg-1) ? NumMsg-1 : No], m_pPlayer->m_Spree);
+		GameServer()->SendChat(-1, TEAM_ALL, aBuf);
 	}
 }
 
@@ -2643,11 +2583,11 @@ void CCharacter::EndSpree(int Killer)
 	if(m_pPlayer->m_Spree >= g_Config.m_SvKillingspreeKills)
 	{
 		GameServer()->CreateSound(m_Pos, SOUND_GRENADE_EXPLODE);
-		GameServer()->CreateExplosion(m_Pos,  m_pPlayer->GetCID(), WEAPON_GRENADE, true, -1, -1);
+		GameServer()->CreateExplosion(m_Pos,  m_pPlayer->GetCid(), WEAPON_GRENADE, true, -1, -1);
 
 		char aBuf[128];
-		str_format(aBuf, sizeof(aBuf), "%s %d-kills killing spree was ended by %s", Server()->ClientName(m_pPlayer->GetCID()), m_pPlayer->m_Spree, Server()->ClientName(Killer));
-		GameServer()->SendChat(-1, CGameContext::CHAT_ALL, aBuf);
+		str_format(aBuf, sizeof(aBuf), "%s %d-kills killing spree was ended by %s", Server()->ClientName(m_pPlayer->GetCid()), m_pPlayer->m_Spree, Server()->ClientName(Killer));
+		GameServer()->SendChat(-1, TEAM_ALL, aBuf);
 	}
 	m_pPlayer->m_Spree = 0;
 }
@@ -2699,19 +2639,19 @@ void CCharacter::ResetPickups()
 
 	if(g_Config.m_sv_hammer)
 	{
-		m_aWeapons[WEAPON_HAMMER].m_Got = true;
+		m_Core.m_aWeapons[WEAPON_HAMMER].m_Got = true;
 		m_Core.m_ActiveWeapon = WEAPON_HAMMER;
 	}
 
 	if(g_Config.m_sv_grenade)
 	{
-		m_aWeapons[WEAPON_GRENADE].m_Got = true;
+		m_Core.m_aWeapons[WEAPON_GRENADE].m_Got = true;
 		m_Core.m_ActiveWeapon = WEAPON_GRENADE;
 	}
 
 	if(g_Config.m_sv_laser)
 	{
-		m_aWeapons[WEAPON_LASER].m_Got = true;
+		m_Core.m_aWeapons[WEAPON_LASER].m_Got = true;
 		m_Core.m_ActiveWeapon = WEAPON_LASER;
 	}
 }

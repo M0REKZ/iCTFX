@@ -1038,27 +1038,6 @@ void CGameContext::ConTeamRank(IConsole::IResult *pResult, void *pUserData)
 			pSelf->Server()->ClientName(pResult->m_ClientId));
 }
 
-void CGameContext::ConRank(IConsole::IResult *pResult, void *pUserData)
-{
-	CGameContext *pSelf = (CGameContext *)pUserData;
-	if(!CheckClientId(pResult->m_ClientId))
-		return;
-
-	if(pResult->NumArguments() > 0)
-	{
-		if(!g_Config.m_SvHideScore)
-			pSelf->Score()->ShowRank(pResult->m_ClientId, pResult->GetString(0));
-		else
-			pSelf->Console()->Print(
-				IConsole::OUTPUT_LEVEL_STANDARD,
-				"chatresp",
-				"Showing the rank of other players is not allowed on this server.");
-	}
-	else
-		pSelf->Score()->ShowRank(pResult->m_ClientId,
-			pSelf->Server()->ClientName(pResult->m_ClientId));
-}
-
 void CGameContext::ConLock(IConsole::IResult *pResult, void *pUserData)
 {
 	CGameContext *pSelf = (CGameContext *)pUserData;
@@ -2439,56 +2418,56 @@ float rate(int a, int b, bool percent) {
 void CGameContext::ConStats(IConsole::IResult *pResult, void *pUserData)
 {
 	CGameContext *pSelf = (CGameContext *)pUserData;
-	if(!CheckClientID(pResult->m_ClientID))
+	if(!CheckClientId(pResult->m_ClientId))
 		return;
-	CPlayer *pPlayer = pSelf->m_apPlayers[pResult->m_ClientID];
+	CPlayer *pPlayer = pSelf->m_apPlayers[pResult->m_ClientId];
 	
-	int ClientID = pResult->m_ClientID;
+	int ClientId = pResult->m_ClientId;
 	if(pResult->NumArguments() > 0)
 	{
-		for(ClientID = 0; ClientID < MAX_CLIENTS; ClientID++)
+		for(ClientId = 0; ClientId < MAX_CLIENTS; ClientId++)
 		{
-			if(str_comp(pResult->GetString(0), pSelf->Server()->ClientName(ClientID)) == 0)
+			if(str_comp(pResult->GetString(0), pSelf->Server()->ClientName(ClientId)) == 0)
 				break;
 		}
-		if(ClientID == MAX_CLIENTS)
+		if(ClientId == MAX_CLIENTS)
 		{
-			pSelf->SendChatTarget(pPlayer->GetCID(), "No player with this name found.");
+			pSelf->SendChatTarget(pPlayer->GetCid(), "No player with this name found.");
 			return;
 		}
-		pPlayer = pSelf->m_apPlayers[ClientID];
+		pPlayer = pSelf->m_apPlayers[ClientId];
 	}
 	if(!pPlayer)
 		return;
 	char aBuf [128];
-	pSelf->SendChatTarget(ClientID, "Stats:");
+	pSelf->SendChatTarget(ClientId, "Stats:");
 	str_format(aBuf, sizeof(aBuf), "shots: %i", pPlayer->m_Shots.load());
-	pSelf->SendChatTarget(ClientID, aBuf);
+	pSelf->SendChatTarget(ClientId, aBuf);
 	str_format(aBuf, sizeof(aBuf), "kills: %i", pPlayer->m_Kills.load());
-	pSelf->SendChatTarget(ClientID, aBuf);
+	pSelf->SendChatTarget(ClientId, aBuf);
 	str_format(aBuf, sizeof(aBuf), "hitrate: %.2f%%", rate(pPlayer->m_Kills.load(), pPlayer->m_Shots.load(), true));
-	pSelf->SendChatTarget(ClientID, aBuf);
+	pSelf->SendChatTarget(ClientId, aBuf);
 	str_format(aBuf, sizeof(aBuf), "wallshots: %i", pPlayer->m_Wallshots.load());
-	pSelf->SendChatTarget(ClientID, aBuf);
+	pSelf->SendChatTarget(ClientId, aBuf);
 	str_format(aBuf, sizeof(aBuf), "wallshot kills: %i", pPlayer->m_WallshotKills.load());
-	pSelf->SendChatTarget(ClientID, aBuf);
+	pSelf->SendChatTarget(ClientId, aBuf);
 	str_format(aBuf, sizeof(aBuf), "wallshot hitrate: %.2f%%", rate(pPlayer->m_WallshotKills.load(), pPlayer->m_Wallshots.load(), true));
-	pSelf->SendChatTarget(ClientID, aBuf);
+	pSelf->SendChatTarget(ClientId, aBuf);
 	str_format(aBuf, sizeof(aBuf), "deaths: %i", pPlayer->m_Deaths.load());
-	pSelf->SendChatTarget(ClientID, aBuf);
+	pSelf->SendChatTarget(ClientId, aBuf);
 	str_format(aBuf, sizeof(aBuf), "K/D: %.2f%%", rate(pPlayer->m_Kills.load(), pPlayer->m_Deaths.load(), false));
-	pSelf->SendChatTarget(ClientID, aBuf);
+	pSelf->SendChatTarget(ClientId, aBuf);
 	str_format(aBuf, sizeof(aBuf), "suicides: %i", pPlayer->m_Suicides.load());
-	pSelf->SendChatTarget(ClientID, aBuf);
+	pSelf->SendChatTarget(ClientId, aBuf);
 	str_format(aBuf, sizeof(aBuf), "touches: %i", pPlayer->m_Touches.load());
-	pSelf->SendChatTarget(ClientID, aBuf);
+	pSelf->SendChatTarget(ClientId, aBuf);
 	str_format(aBuf, sizeof(aBuf), "captures: %i", pPlayer->m_Captures.load());
-	pSelf->SendChatTarget(ClientID, aBuf);
+	pSelf->SendChatTarget(ClientId, aBuf);
 	str_format(aBuf, sizeof(aBuf), "capture per touch: %.2f%%", rate(pPlayer->m_Captures.load(), pPlayer->m_Touches.load(), true));
-	pSelf->SendChatTarget(ClientID, aBuf);
+	pSelf->SendChatTarget(ClientId, aBuf);
 	if (pPlayer->m_FastestCapture > 0) {
 		str_format(aBuf, sizeof(aBuf), "fastest cap: %.3f", rate(pPlayer->m_FastestCapture.load(), 1000.0, false));
-		pSelf->SendChatTarget(ClientID, aBuf);
+		pSelf->SendChatTarget(ClientId, aBuf);
 	}
 	
 }
@@ -2496,17 +2475,17 @@ void CGameContext::ConStats(IConsole::IResult *pResult, void *pUserData)
 
 void CGameContext::ConRank(IConsole::IResult *pResult, void *pUserData) {
 	CGameContext *pSelf = (CGameContext *)pUserData;
-	if(!CheckClientID(pResult->m_ClientID))
+	if(!CheckClientId(pResult->m_ClientId))
 		return;
-	CPlayer *pPlayer = pSelf->m_apPlayers[pResult->m_ClientID];
-	pSelf->m_pController->sql_handler->show_rank(pPlayer, pSelf->Server()->ClientName(pResult->m_ClientID));
+	CPlayer *pPlayer = pSelf->m_apPlayers[pResult->m_ClientId];
+	pSelf->m_pController->sql_handler->show_rank(pPlayer, pSelf->Server()->ClientName(pResult->m_ClientId));
 }
 
 void CGameContext::ConTop5(IConsole::IResult *pResult, void *pUserData) {
 	CGameContext *pSelf = (CGameContext *)pUserData;
-	if(!CheckClientID(pResult->m_ClientID))
+	if(!CheckClientId(pResult->m_ClientId))
 		return;
-	CPlayer *pPlayer = pSelf->m_apPlayers[pResult->m_ClientID];
+	CPlayer *pPlayer = pSelf->m_apPlayers[pResult->m_ClientId];
 	pSelf->m_pController->sql_handler->show_top5(pPlayer);
 }
 
